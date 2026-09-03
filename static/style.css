@@ -1,0 +1,30 @@
+/* PitchLab AI Custom Styling */
+
+@keyframes pulse-gold {
+    0%, 100% {
+        box-shadow: 0 0 15px rgba(255, 184, 0, 0.25);
+    }
+    50% {
+        box-shadow: 0 0 30px rgba(255, 184, 0, 0.45);
+    }
+}
+
+.glow-gold {
+    animation: pulse-gold 3s infinite ease-in-out;
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+::-webkit-scrollbar-track {
+    background: #0C0D14;
+}
+::-webkit-scrollbar-thumb {
+    background: #252836;
+    border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: #FFB800;
+}

@@ -1,0 +1,36 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*.class
+*.pytest_cache/
+
+# Environments
+.env
+.venv/
+env/
+venv/
+ENV/
+
+# Large Model Weights & 3rd-Party Clones
+BaseballCV/
+*.pt
+*.onnx
+*.weights
+*.bin
+
+# Video Files & Outputs
+uploads/
+outputs/
+*.avi
+*.mov
+*.tmp.*
+WhatsApp Video*
+!assets/sample_pitch.mp4
+
+# IDEs
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
