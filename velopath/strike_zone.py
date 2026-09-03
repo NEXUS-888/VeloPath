@@ -55,8 +55,19 @@ class StrikeZone:
         Returns calibrated strike zone for Broadcast or Mobile camera perspective.
         Properly scaled to match regulation MLB home plate and batter strike zone.
         """
-        is_broadcast = (view_type == "broadcast") or (view_type == "auto" and (width / float(height)) > 1.3)
-        if is_broadcast:
+        if view_type == "behind_pitcher":
+            # Pitcher foreground, batter & catcher in mid-distance in front of net
+            cx = width * 0.48
+            cy = height * 0.42
+            zw = width * 0.14
+            zh = height * 0.12
+            return cls(
+                x_min=cx - (zw / 2.0),
+                y_min=cy - (zh / 2.0),
+                x_max=cx + (zw / 2.0),
+                y_max=cy + (zh / 2.0)
+            )
+        elif is_broadcast:
             # Broadcast Center-Field Camera (Home plate in front of catcher)
             # Tightly calibrated: 118px wide by 126px tall in 1080p
             cx = width * 0.558

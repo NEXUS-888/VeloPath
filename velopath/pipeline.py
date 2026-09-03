@@ -104,7 +104,7 @@ def process_pitch_video(
             y_max=custom_strike_zone["y_max"],
         )
     else:
-        strike_zone = StrikeZone.get_preset_zone(width, height)
+        strike_zone = StrikeZone.get_preset_zone(width, height, view_type=perspective)
 
     # Evaluate crossing point
     plate_pt = (trajectory_points[-1].x, trajectory_points[-1].y)
