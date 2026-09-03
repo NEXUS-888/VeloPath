@@ -113,18 +113,23 @@ class PitchTracker:
     """
     def __init__(self, model_path: Optional[str] = None):
         self.model = None
-        if model_path is None:
-            default_weights = os.path.join(
-                os.path.dirname(__file__), "..", "BaseballCV", "models", "od", "YOLO", 
-                "ball_tracking", "model_weights", "ball_trackingv4.pt"
-            )
-            if os.path.exists(default_weights):
-                model_path = os.path.abspath(default_weights)
+        self.device = "cpu"
+        
+        try:
+            from velopath.model_manager import resolve_model_path, get_acceleration_device
+            self.device, device_name = get_acceleration_device()
+            if model_path is None:
+                model_path = resolve_model_path(auto_download=True)
+        except Exception as e:
+            device_name = "CPU (Fallback)"
+            print(f"[PitchTracker] Note on model manager: {e}")
                 
         if model_path and os.path.exists(model_path):
             try:
                 from ultralytics import YOLO
                 self.model = YOLO(model_path)
+                print(f"[PitchTracker] Loaded model weights from: {model_path}")
+                print(f"[PitchTracker] Compute acceleration: {device_name}")
             except Exception as e:
                 print(f"[PitchTracker] Note: Could not load YOLO: {e}")
 
@@ -275,7 +280,7 @@ class PitchTracker:
             if self.model:
                 try:
                     crop = frame[crop_y1:crop_y2, crop_x1:crop_x2]
-                    res = self.model.predict(crop, conf=0.15, verbose=False, imgsz=384)
+                    res = self.model.predict(crop, conf=0.15, verbose=False, imgsz=384, device=self.device)
                     for b in res[0].boxes:
                         bx1, by1, bx2, by2 = b.xyxy[0].tolist()
                         bcx = (bx1 + bx2) / 2.0 + crop_x1
@@ -353,7 +358,7 @@ class PitchTracker:
             if self.model and (curr_frame % frame_stride == 0):
                 try:
                     crop = frame[crop_y1:crop_y2, crop_x1:crop_x2]
-                    res = self.model.predict(crop, conf=conf_thresh, verbose=False, imgsz=480)
+                    res = self.model.predict(crop, conf=conf_thresh, verbose=False, imgsz=480, device=self.device)
                     if len(res[0].boxes) > 0:
                         valid_boxes = []
                         for b in res[0].boxes:
