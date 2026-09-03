@@ -55,8 +55,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const zoneCalibrationDock = document.getElementById('zoneCalibrationDock');
     const dockApplyBtn = document.getElementById('dockApplyBtn');
     const dockCancelBtn = document.getElementById('dockCancelBtn');
-    const dockCallStatus = document.getElementById('dockCallStatus');
     const videoZoneToggleBtn = document.getElementById('videoZoneToggleBtn');
+    const videoStage = document.getElementById('videoStage');
+    const zoneZoomToggleBtn = document.getElementById('zoneZoomToggleBtn');
+    const zoomControlDock = document.getElementById('zoomControlDock');
+    const zoomLevelDisplay = document.getElementById('zoomLevelDisplay');
+    const zoomOutBtn = document.getElementById('zoomOutBtn');
+    const zoomInBtn = document.getElementById('zoomInBtn');
+    const zoomResetBtn = document.getElementById('zoomResetBtn');
     const calibrateZoneSidebarBtn = document.getElementById('calibrateZoneSidebarBtn');
     const applyZoneChangesBtn = document.getElementById('applyZoneChangesBtn');
     const zoneWVal = document.getElementById('zoneWVal');
@@ -259,9 +265,8 @@ document.addEventListener('DOMContentLoaded', () => {
         syncInteractiveBox();
     }
 
-    // 10. Coordinate Mapping for Clean Strike Zone Box
     function getVideoRenderedGeometry() {
-        const container = video.parentElement.getBoundingClientRect();
+        const container = videoDropZone.getBoundingClientRect();
         const vidW = currentPitchData?.video_resolution?.width || (video.videoWidth || 1920);
         const vidH = currentPitchData?.video_resolution?.height || (video.videoHeight || 1080);
         const videoRatio = vidW / vidH;
@@ -395,8 +400,8 @@ document.addEventListener('DOMContentLoaded', () => {
     window.addEventListener('mousemove', (e) => {
         if (!activeAction) return;
         const geom = getVideoRenderedGeometry();
-        const deltaVidX = (e.clientX - startMouseX) * (geom.vidW / geom.renderW);
-        const deltaVidY = (e.clientY - startMouseY) * (geom.vidH / geom.renderH);
+        const deltaVidX = ((e.clientX - startMouseX) * (geom.vidW / geom.renderW)) / (currentZoom || 1.0);
+        const deltaVidY = ((e.clientY - startMouseY) * (geom.vidH / geom.renderH)) / (currentZoom || 1.0);
 
         if (activeAction === 'drag') {
             strikeZone.cx = Math.max(10, Math.min(geom.vidW - 10, startZone.cx + deltaVidX));
@@ -423,6 +428,114 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     window.addEventListener('resize', syncInteractiveBox);
+
+    // 13. Strike Zone Zoom & Close-Inspection Engine
+    let currentZoom = 1.0;
+    let panX = 0;
+    let panY = 0;
+    let isPanning = false;
+    let panStartX = 0;
+    let panStartY = 0;
+    let startPanX = 0;
+    let startPanY = 0;
+
+    function applyZoom(zoom, smooth = true) {
+        currentZoom = Math.max(1.0, Math.min(4.5, zoom));
+
+        if (smooth) {
+            videoStage.style.transition = 'transform 0.25s cubic-bezier(0.16, 1, 0.3, 1)';
+        } else {
+            videoStage.style.transition = 'none';
+        }
+
+        if (currentZoom <= 1.01) {
+            currentZoom = 1.0;
+            panX = 0;
+            panY = 0;
+            videoStage.style.transformOrigin = 'center center';
+            videoStage.style.transform = 'scale(1) translate(0px, 0px)';
+            zoomControlDock.classList.add('hidden');
+            zoneZoomToggleBtn.classList.remove('bg-pitchcyan', 'text-black', 'font-bold');
+            zoneZoomToggleBtn.classList.add('text-slate-300');
+            videoDropZone.style.cursor = 'default';
+        } else {
+            // Center zoom transform origin directly on Strike Zone center
+            const geom = getVideoRenderedGeometry();
+            const szScreenX = geom.offsetX + (strikeZone.cx / geom.vidW) * geom.renderW;
+            const szScreenY = geom.offsetY + (strikeZone.cy / geom.vidH) * geom.renderH;
+
+            videoStage.style.transformOrigin = `${szScreenX}px ${szScreenY}px`;
+            videoStage.style.transform = `scale(${currentZoom}) translate(${panX}px, ${panY}px)`;
+
+            zoomControlDock.classList.remove('hidden');
+            zoomLevelDisplay.textContent = `${currentZoom.toFixed(1)}x`;
+            zoneZoomToggleBtn.classList.add('bg-pitchcyan', 'text-black', 'font-bold');
+            zoneZoomToggleBtn.classList.remove('text-slate-300');
+            videoDropZone.style.cursor = 'grab';
+        }
+    }
+
+    function toggleZoneZoom() {
+        if (currentZoom > 1.05) {
+            applyZoom(1.0, true);
+        } else {
+            panX = 0;
+            panY = 0;
+            applyZoom(2.5, true);
+        }
+    }
+
+    if (zoneZoomToggleBtn) zoneZoomToggleBtn.addEventListener('click', toggleZoneZoom);
+    if (zoomInBtn) zoomInBtn.addEventListener('click', () => applyZoom(currentZoom + 0.5, true));
+    if (zoomOutBtn) zoomOutBtn.addEventListener('click', () => applyZoom(currentZoom - 0.5, true));
+    if (zoomResetBtn) zoomResetBtn.addEventListener('click', () => applyZoom(1.0, true));
+
+    // Mouse Wheel Zoom
+    videoDropZone.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        const delta = e.deltaY < 0 ? 0.35 : -0.35;
+        applyZoom(currentZoom + delta, true);
+    }, { passive: false });
+
+    // Double-click to toggle Zoom into Strike Zone
+    videoDropZone.addEventListener('dblclick', (e) => {
+        if (e.target.closest('button') || e.target.closest('.zone-anchor') || e.target.closest('#zoomControlDock')) return;
+        toggleZoneZoom();
+    });
+
+    // Panning when zoomed in
+    videoDropZone.addEventListener('mousedown', (e) => {
+        if (e.target.classList.contains('zone-anchor') || e.target.closest('button') || e.target.closest('#zoomControlDock')) {
+            return;
+        }
+        if (currentZoom > 1.0) {
+            isPanning = true;
+            panStartX = e.clientX;
+            panStartY = e.clientY;
+            startPanX = panX;
+            startPanY = panY;
+            videoDropZone.style.cursor = 'grabbing';
+            videoStage.style.transition = 'none';
+        }
+    });
+
+    window.addEventListener('mousemove', (e) => {
+        if (!isPanning) return;
+        const dx = (e.clientX - panStartX) / currentZoom;
+        const dy = (e.clientY - panStartY) / currentZoom;
+        panX = startPanX + dx;
+        panY = startPanY + dy;
+        applyZoom(currentZoom, false);
+    });
+
+    window.addEventListener('mouseup', () => {
+        if (isPanning) {
+            isPanning = false;
+            if (currentZoom > 1.0) {
+                videoDropZone.style.cursor = 'grab';
+            }
+        }
+    });
 
     // 13. HUD Visibility Toggle
     toggleHudBtn.addEventListener('click', () => {
@@ -661,7 +774,13 @@ document.addEventListener('DOMContentLoaded', () => {
         } else if (e.key === 'z' || e.key === 'Z') {
             e.preventDefault();
             setCalibrationMode(!isZoneCalibrating);
+        } else if (e.key === 'x' || e.key === 'X') {
+            e.preventDefault();
+            toggleZoneZoom();
         } else if (e.code === 'Escape') {
+            if (currentZoom > 1.0) {
+                applyZoom(1.0, true);
+            }
             if (isZoneCalibrating) {
                 setCalibrationMode(false);
             }

@@ -87,11 +87,56 @@
         <div class="xl:col-span-8 flex flex-col gap-4">
             
             <!-- Video Viewport Container -->
-            <div class="video-viewport-wrapper relative aspect-[16/9] max-h-[72vh] flex items-center justify-center group bg-black" id="videoDropZone">
-                <video id="pitchVideo" class="w-full h-full object-contain" playsinline preload="metadata">
-                    <source id="videoSource" src="" type="video/mp4">
-                    Your browser does not support HTML5 video.
-                </video>
+            <div class="video-viewport-wrapper relative aspect-[16/9] max-h-[72vh] flex items-center justify-center group bg-black overflow-hidden select-none" id="videoDropZone">
+                
+                <!-- Zoomable Video & Zone Stage -->
+                <div id="videoStage" class="w-full h-full relative flex items-center justify-center transition-transform duration-200 ease-out origin-center will-change-transform">
+                    <video id="pitchVideo" class="w-full h-full object-contain pointer-events-auto" playsinline preload="metadata">
+                        <source id="videoSource" src="" type="video/mp4">
+                        Your browser does not support HTML5 video.
+                    </video>
+
+                    <!-- Direct Interactive Strike Zone Canvas Box (Clean Figma-Grade Overlay) -->
+                    <div id="interactiveZoneBox" class="zone-canvas-box hidden" style="left: 50%; top: 50%; width: 120px; height: 130px; transform: translate(-50%, -50%);">
+                        <!-- Subtle 3x3 Radar Grid -->
+                        <div class="w-full h-full grid grid-cols-3 grid-rows-3 pointer-events-none opacity-60">
+                            <div class="border-r border-b border-white/20"></div>
+                            <div class="border-r border-b border-white/20"></div>
+                            <div class="border-b border-white/20"></div>
+                            <div class="border-r border-b border-white/20"></div>
+                            <div class="border-r border-b border-white/20"></div>
+                            <div class="border-b border-white/20"></div>
+                            <div class="border-r border-b border-white/20"></div>
+                            <div class="border-r border-b border-white/20"></div>
+                            <div></div>
+                        </div>
+
+                        <!-- 4 Precise Corner Resize Anchors -->
+                        <div id="anchorNW" class="zone-anchor" data-handle="nw"></div>
+                        <div id="anchorNE" class="zone-anchor" data-handle="ne"></div>
+                        <div id="anchorSW" class="zone-anchor" data-handle="sw"></div>
+                        <div id="anchorSE" class="zone-anchor" data-handle="se"></div>
+                    </div>
+                </div>
+
+                <!-- Floating Strike Zone Zoom Inspector Dock -->
+                <div id="zoomControlDock" class="absolute top-4 left-1/2 -translate-x-1/2 glass-pill px-3 py-1.5 rounded-xl flex items-center gap-2.5 z-30 shadow-2xl border border-pitchcyan/40 hidden transition-all animate-fade-in">
+                    <div class="flex items-center gap-1.5 text-xs font-bold text-pitchcyan">
+                        <i data-lucide="zoom-in" class="w-3.5 h-3.5"></i>
+                        <span id="zoomLevelDisplay">2.5x</span>
+                    </div>
+                    <div class="h-3 w-px bg-white/20"></div>
+                    <button id="zoomOutBtn" title="Zoom Out" class="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition">
+                        <i data-lucide="minus" class="w-3.5 h-3.5"></i>
+                    </button>
+                    <button id="zoomInBtn" title="Zoom In" class="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition">
+                        <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+                    </button>
+                    <button id="zoomResetBtn" title="Reset to 1.0x Full View" class="px-2 py-0.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-[11px] font-semibold text-slate-300 transition">
+                        Reset (1x)
+                    </button>
+                    <span class="text-[10px] text-slate-400 hidden sm:inline pl-1 border-l border-white/10">Drag to pan • Scroll to zoom</span>
+                </div>
 
                 <!-- Initial Empty State / Dropzone -->
                 <div id="emptyState" class="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/95 z-10 p-6 text-center">
@@ -126,28 +171,6 @@
                 <!-- Live Umpire Decision Ribbon (Top-Right, Non-Obtrusive) -->
                 <div id="videoOverlayCall" class="absolute top-4 right-4 glass-pill px-3 py-1.5 rounded-xl z-20 pointer-events-none transition-opacity duration-300 opacity-0">
                     <span id="overlayCallText" class="text-xs font-black tracking-wider uppercase px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">STRIKE</span>
-                </div>
-
-                <!-- Direct Interactive Strike Zone Canvas Box (Clean Figma-Grade Overlay) -->
-                <div id="interactiveZoneBox" class="zone-canvas-box hidden" style="left: 50%; top: 50%; width: 120px; height: 130px; transform: translate(-50%, -50%);">
-                    <!-- Subtle 3x3 Radar Grid -->
-                    <div class="w-full h-full grid grid-cols-3 grid-rows-3 pointer-events-none opacity-60">
-                        <div class="border-r border-b border-white/20"></div>
-                        <div class="border-r border-b border-white/20"></div>
-                        <div class="border-b border-white/20"></div>
-                        <div class="border-r border-b border-white/20"></div>
-                        <div class="border-r border-b border-white/20"></div>
-                        <div class="border-b border-white/20"></div>
-                        <div class="border-r border-b border-white/20"></div>
-                        <div class="border-r border-b border-white/20"></div>
-                        <div></div>
-                    </div>
-
-                    <!-- 4 Precise Corner Resize Anchors -->
-                    <div id="anchorNW" class="zone-anchor" data-handle="nw"></div>
-                    <div id="anchorNE" class="zone-anchor" data-handle="ne"></div>
-                    <div id="anchorSW" class="zone-anchor" data-handle="sw"></div>
-                    <div id="anchorSE" class="zone-anchor" data-handle="se"></div>
                 </div>
 
                 <!-- Floating Bottom Calibration Dock (Only visible when calibrating) -->
@@ -211,6 +234,12 @@
                     <button id="videoZoneToggleBtn" title="Calibrate Strike Zone (Z)" class="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-pitchcyan border border-pitchcyan/30 transition btn-tactile">
                         <i data-lucide="crosshair" class="w-4 h-4"></i>
                         <span>Calibrate Zone</span>
+                    </button>
+
+                    <!-- Zoom to Strike Zone Button -->
+                    <button id="zoneZoomToggleBtn" title="Zoom to Strike Zone for Close Inspection (X)" class="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300 border border-white/10 transition btn-tactile">
+                        <i data-lucide="zoom-in" class="w-4 h-4 text-pitchcyan"></i>
+                        <span>Inspect Zone</span>
                     </button>
 
                     <!-- HUD Toggle Button -->
@@ -486,8 +515,12 @@
                     <span class="text-slate-300">Toggle Strike Zone Calibration</span>
                     <kbd class="px-2 py-0.5 rounded bg-slate-800 border border-white/10 font-mono text-pitchcyan">Z</kbd>
                 </div>
+                <div class="flex items-center justify-between py-1.5 border-b border-white/5">
+                    <span class="text-slate-300">Inspect Strike Zone (Zoom)</span>
+                    <kbd class="px-2 py-0.5 rounded bg-slate-800 border border-white/10 font-mono text-pitchcyan">X</kbd>
+                </div>
                 <div class="flex items-center justify-between py-1.5">
-                    <span class="text-slate-300">Cancel Calibration</span>
+                    <span class="text-slate-300">Reset Zoom / Cancel Calibration</span>
                     <kbd class="px-2 py-0.5 rounded bg-slate-800 border border-white/10 font-mono text-pitchcyan">Esc</kbd>
                 </div>
             </div>
