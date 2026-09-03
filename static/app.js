@@ -32,7 +32,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const plateVelocityVal = document.getElementById('plateVelocityVal');
     const plateVelocityKmh = document.getElementById('plateVelocityKmh');
     const dragLossPct = document.getElementById('dragLossPct');
-    const coveragePct = document.getElementById('coveragePct');
+    const proofFramesCount = document.getElementById('proofFramesCount');
+    const proofTimeStr = document.getElementById('proofTimeStr');
+    const proofDistStr = document.getElementById('proofDistStr');
+    const proofFormulaStr = document.getElementById('proofFormulaStr');
     const flightTimeVal = document.getElementById('flightTimeVal');
     const vertBreakVal = document.getElementById('vertBreakVal');
     const horzBreakVal = document.getElementById('horzBreakVal');
@@ -453,8 +456,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const dragLoss = ((data.velocity_mph - plateMph) / Math.max(1, data.velocity_mph)) * 100.0;
         if (dragLossPct) dragLossPct.textContent = `-${dragLoss.toFixed(1)}%`;
-        const covPct = Math.round((data.coverage_fraction || 1.0) * 100);
-        if (coveragePct) coveragePct.textContent = `${covPct}%`;
+        
+        // Mathematical Proof Breakdown
+        const elapsedFrames = data.elapsed_frames || Math.round((data.flight_time_ms / 1000) * (data.fps || 30));
+        const fpsVal = data.fps || 30.0;
+        const timeSec = (data.flight_time_ms / 1000.0);
+        const distFt = getSelectedDistance();
+
+        if (proofFramesCount) proofFramesCount.textContent = `${elapsedFrames} frames`;
+        if (proofTimeStr) proofTimeStr.textContent = `${timeSec.toFixed(3)}s (${Math.round(data.flight_time_ms)} ms) [${elapsedFrames} frames @ ${fpsVal.toFixed(1)} fps]`;
+        if (proofDistStr) proofDistStr.textContent = `${distFt.toFixed(1)} ft (${(distFt * 0.3048).toFixed(1)} m)`;
+        if (proofFormulaStr) proofFormulaStr.textContent = `${distFt.toFixed(1)} ft / ${timeSec.toFixed(3)}s × 0.6818 = ${data.velocity_mph.toFixed(1)} MPH`;
 
         // Kinematics Micro-Cards
         flightTimeVal.textContent = Math.round(data.flight_time_ms);

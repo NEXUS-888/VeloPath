@@ -267,7 +267,27 @@
                     </div>
                     <div class="flex items-center justify-between text-[10px] text-slate-500 pt-2 border-t border-white/5">
                         <span>Aerodynamic Drag: <span id="dragLossPct" class="text-slate-400 font-semibold">-5.0%</span></span>
-                        <span>Coverage: <span id="coveragePct" class="text-slate-400 font-semibold">100%</span></span>
+                        <span>Measured Frames: <span id="proofFramesCount" class="text-slate-400 font-semibold">--</span></span>
+                    </div>
+                </div>
+
+                <!-- Mathematical Proof & Kinematics Transparency Card -->
+                <div class="p-3 rounded-xl bg-slate-900/60 border border-white/5 space-y-1.5 text-xs text-slate-400 mb-4">
+                    <div class="font-bold text-white flex items-center justify-between">
+                        <span class="flex items-center gap-1.5"><i data-lucide="calculator" class="w-3.5 h-3.5 text-pitchcyan"></i> Mathematical Proof</span>
+                        <span class="text-pitchcyan font-mono text-[10px]">v = d / t</span>
+                    </div>
+                    <div class="flex justify-between text-[11px]">
+                        <span>Measured Flight Time:</span>
+                        <span class="font-bold text-white tabular-nums"><span id="proofTimeStr">--</span></span>
+                    </div>
+                    <div class="flex justify-between text-[11px]">
+                        <span>Distance Traveled:</span>
+                        <span class="font-bold text-white tabular-nums"><span id="proofDistStr">--</span></span>
+                    </div>
+                    <div class="flex justify-between border-t border-white/5 pt-1 text-[11px]">
+                        <span class="text-slate-400">Formula Proof:</span>
+                        <span id="proofFormulaStr" class="font-mono text-pitchcyan font-semibold truncate">--</span>
                     </div>
                 </div>
 

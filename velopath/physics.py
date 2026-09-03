@@ -151,8 +151,8 @@ def calculate_advanced_velocity(
     plate_mph = round(float(v_avg_mph * (1.0 - drag_factor)), 1)
     avg_mph = round(float(v_avg_mph), 1)
 
-    # Full flight time in ms
-    full_flight_time_ms = round(float((time_s / cov) * 1000.0), 1)
+    # Full flight time in ms (actual measured elapsed time)
+    full_flight_time_ms = round(float(time_s * 1000.0), 1)
 
     return {
         "release_velocity_mph": release_mph,

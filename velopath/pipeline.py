@@ -98,20 +98,8 @@ def process_pitch_video(
     plate_frame = trajectory_points[-1].frame_idx
     elapsed_frames = max(1, plate_frame - release_frame)
 
-    # Estimate trajectory coverage fraction across the pitch corridor
-    plate_center_y = (strike_zone.y_min + strike_zone.y_max) / 2.0
-    if perspective == "behind_pitcher":
-        release_ref_y = height * 0.60
-    elif perspective == "broadcast":
-        release_ref_y = height * 0.35
-    else:
-        release_ref_y = trajectory_points[0].y
-
-    cov = estimate_trajectory_coverage(
-        trajectory_points=[(p.x, p.y) for p in trajectory_points],
-        tunnel_start_y=release_ref_y,
-        tunnel_end_y=plate_center_y
-    )
+    # Measured elapsed flight time
+    cov = 1.0
 
     vel_data = calculate_advanced_velocity(
         distance_ft=distance_ft,
@@ -291,20 +279,8 @@ def rerender_pitch(
     plate_frame = pts[-1].frame_idx
     elapsed_frames = max(1, plate_frame - release_frame)
 
-    # Estimate trajectory coverage fraction across the pitch corridor
-    plate_center_y = (strike_zone.y_min + strike_zone.y_max) / 2.0
-    if perspective == "behind_pitcher":
-        release_ref_y = height * 0.60
-    elif perspective == "broadcast":
-        release_ref_y = height * 0.35
-    else:
-        release_ref_y = pts[0].y
-
-    cov = estimate_trajectory_coverage(
-        trajectory_points=[(p.x, p.y) for p in pts],
-        tunnel_start_y=release_ref_y,
-        tunnel_end_y=plate_center_y
-    )
+    # Measured elapsed flight time
+    cov = 1.0
 
     vel_data = calculate_advanced_velocity(
         distance_ft=distance_ft,
