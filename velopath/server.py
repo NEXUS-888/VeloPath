@@ -91,6 +91,8 @@ class RerenderPayload(BaseModel):
     distance_ft: float = 60.5
     custom_strike_zone: dict
     graphic_style: str = "statcast_cyan"
+    ball_type: str = "auto"
+    perspective: str = "auto"
     pitch_number: int = 1
 
 
@@ -100,6 +102,8 @@ async def process_uploaded_video(
     distance_ft: float = Form(60.5),
     pitch_number: int = Form(1),
     graphic_style: str = Form("statcast_cyan"),
+    ball_type: str = Form("auto"),
+    perspective: str = Form("auto"),
     custom_strike_zone: Optional[str] = Form(None),
 ):
     """Accepts an uploaded pitch video and returns Pitch Lab metrics and rendered video."""
@@ -127,6 +131,8 @@ async def process_uploaded_video(
             custom_strike_zone=zone_dict,
             pitch_number=pitch_number,
             graphic_style=graphic_style,
+            ball_type=ball_type,
+            perspective=perspective,
         )
         result["video_id"] = file_id
         result["video_url"] = f"/api/video/{output_filename}"
@@ -139,7 +145,9 @@ async def process_uploaded_video(
 async def rerender_existing_pitch(payload: RerenderPayload):
     """Fast re-render using existing trajectory and updated strike zone or graphic style."""
     if payload.video_id == "sample":
-        input_video = os.path.join(BASE_DIR, "WhatsApp Video 2026-09-02 at 11.24.19 PM.mp4")
+        input_video = os.path.join(BASE_DIR, "assets", "sample_pitch.mp4")
+        if not os.path.exists(input_video):
+            input_video = os.path.join(BASE_DIR, "WhatsApp Video 2026-09-02 at 11.24.19 PM.mp4")
     else:
         matches = [f for f in os.listdir(UPLOADS_DIR) if f.startswith(f"input_{payload.video_id}")]
         if not matches:
@@ -158,6 +166,8 @@ async def rerender_existing_pitch(payload: RerenderPayload):
             custom_strike_zone=payload.custom_strike_zone,
             graphic_style=payload.graphic_style,
             pitch_number=payload.pitch_number,
+            ball_type=payload.ball_type,
+            perspective=payload.perspective,
         )
         result["video_id"] = payload.video_id
         result["video_url"] = f"/api/video/{output_filename}"

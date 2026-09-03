@@ -25,6 +25,7 @@ outputs/
 *.mov
 *.tmp.*
 WhatsApp Video*
+real_world*
 !assets/sample_pitch.mp4
 
 # IDEs

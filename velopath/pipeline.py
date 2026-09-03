@@ -18,8 +18,10 @@ def process_pitch_video(
     distance_ft: float = 60.5,
     custom_strike_zone: Optional[Dict[str, float]] = None,
     pitch_number: int = 1,
-    conf_thresh: float = 0.20,
+    conf_thresh: float = 0.15,
     graphic_style: str = "statcast_cyan",
+    ball_type: str = "auto",
+    perspective: str = "auto",
 ) -> Dict[str, Any]:
     """
     Complete end-to-end Pitch Lab analysis:
@@ -35,7 +37,9 @@ def process_pitch_video(
     # 1. Track ball throughout video
     trajectory_points, fps, (width, height) = tracker.track_video(
         input_video_path,
-        conf_thresh=conf_thresh
+        conf_thresh=conf_thresh,
+        ball_type=ball_type,
+        perspective=perspective,
     )
 
     cap = cv2.VideoCapture(input_video_path)
@@ -150,6 +154,8 @@ def process_pitch_video(
             "y": round(plate_pt[1], 1),
         },
         "graphic_style": graphic_style,
+        "ball_type": ball_type,
+        "perspective": perspective,
         "release_frame": release_frame,
         "plate_frame": plate_frame,
         "elapsed_frames": elapsed_frames,
@@ -222,6 +228,8 @@ def rerender_pitch(
     custom_strike_zone: dict,
     graphic_style: str = "statcast_cyan",
     pitch_number: int = 1,
+    ball_type: str = "auto",
+    perspective: str = "auto",
 ) -> dict:
     """
     Fast re-render using existing tracked trajectory and updated strike zone or graphic theme.
@@ -308,6 +316,8 @@ def rerender_pitch(
             "y": round(plate_pt[1], 1),
         },
         "graphic_style": graphic_style,
+        "ball_type": ball_type,
+        "perspective": perspective,
         "release_frame": release_frame,
         "plate_frame": plate_frame,
         "elapsed_frames": elapsed_frames,

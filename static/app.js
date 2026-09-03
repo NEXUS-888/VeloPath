@@ -38,26 +38,33 @@ document.addEventListener('DOMContentLoaded', () => {
     const sideHorz = document.getElementById('sideHorz');
     const sidePitchType = document.getElementById('sidePitchType');
 
-    // Strike Zone & Graphics Controls
+    // Ball, Perspective & Graphic Controls
+    const ballTypeSelect = document.getElementById('ballTypeSelect');
+    const perspectiveSelect = document.getElementById('perspectiveSelect');
     const graphicStyleSelect = document.getElementById('graphicStyleSelect');
+
+    // Strike Zone Controls & On-Screen Elements
     const toggleZoneEditorBtn = document.getElementById('toggleZoneEditorBtn');
     const zoneEditorToggleText = document.getElementById('zoneEditorToggleText');
-    const zoneXSlider = document.getElementById('zoneXSlider');
-    const zoneYSlider = document.getElementById('zoneYSlider');
-    const zoneWSlider = document.getElementById('zoneWSlider');
-    const zoneHSlider = document.getElementById('zoneHSlider');
-    const zoneXVal = document.getElementById('zoneXVal');
-    const zoneYVal = document.getElementById('zoneYVal');
-    const zoneWVal = document.getElementById('zoneWVal');
-    const zoneHVal = document.getElementById('zoneHVal');
     const presetBroadcastBtn = document.getElementById('presetBroadcastBtn');
+    const presetBowlerBtn = document.getElementById('presetBowlerBtn');
     const presetMobileBtn = document.getElementById('presetMobileBtn');
     const applyZoneBtn = document.getElementById('applyZoneBtn');
     const interactiveZoneBox = document.getElementById('interactiveZoneBox');
-    const zoneResizeHandle = document.getElementById('zoneResizeHandle');
+    const onScreenCallTag = document.getElementById('onScreenCallTag');
+    const onScreenApplyBtn = document.getElementById('onScreenApplyBtn');
+    const onScreenCloseBtn = document.getElementById('onScreenCloseBtn');
 
     let currentPitchData = null;
     let isZoneEditorOpen = false;
+
+    // Active Strike Zone Geometry in native video pixels
+    let strikeZone = {
+        cx: 1071,
+        cy: 437,
+        w: 120,
+        h: 130
+    };
 
     // 3. Play / Pause Controls
     playPauseBtn.addEventListener('click', () => {
@@ -146,54 +153,45 @@ document.addEventListener('DOMContentLoaded', () => {
         return { renderW, renderH, offsetX, offsetY, vidW, vidH };
     }
 
-    function syncInteractiveBoxFromSliders() {
+    function syncInteractiveBox() {
         if (!interactiveZoneBox || interactiveZoneBox.classList.contains('hidden')) return;
         const geom = getVideoRenderedGeometry();
-        const cx = parseFloat(zoneXSlider.value);
-        const cy = parseFloat(zoneYSlider.value);
-        const w = parseFloat(zoneWSlider.value);
-        const h = parseFloat(zoneHSlider.value);
-
-        const screenX = geom.offsetX + (cx / geom.vidW) * geom.renderW;
-        const screenY = geom.offsetY + (cy / geom.vidH) * geom.renderH;
-        const screenW = (w / geom.vidW) * geom.renderW;
-        const screenH = (h / geom.vidH) * geom.renderH;
+        const screenX = geom.offsetX + (strikeZone.cx / geom.vidW) * geom.renderW;
+        const screenY = geom.offsetY + (strikeZone.cy / geom.vidH) * geom.renderH;
+        const screenW = (strikeZone.w / geom.vidW) * geom.renderW;
+        const screenH = (strikeZone.h / geom.vidH) * geom.renderH;
 
         interactiveZoneBox.style.left = `${screenX}px`;
         interactiveZoneBox.style.top = `${screenY}px`;
-        interactiveZoneBox.style.width = `${screenW}px`;
-        interactiveZoneBox.style.height = `${screenH}px`;
+        interactiveZoneBox.style.width = `${Math.max(30, screenW)}px`;
+        interactiveZoneBox.style.height = `${Math.max(30, screenH)}px`;
 
         checkLiveStrikeCall();
     }
 
-    function updateSliderLabels() {
-        zoneXVal.textContent = `${Math.round(zoneXSlider.value)} px`;
-        zoneYVal.textContent = `${Math.round(zoneYSlider.value)} px`;
-        zoneWVal.textContent = `${Math.round(zoneWSlider.value)} px`;
-        zoneHVal.textContent = `${Math.round(zoneHSlider.value)} px`;
-    }
-
     function checkLiveStrikeCall() {
         if (!currentPitchData?.plate_crossing) return;
-        const cx = parseFloat(zoneXSlider.value);
-        const cy = parseFloat(zoneYSlider.value);
-        const w = parseFloat(zoneWSlider.value);
-        const h = parseFloat(zoneHSlider.value);
-
-        const x_min = cx - (w / 2.0);
-        const x_max = cx + (w / 2.0);
-        const y_min = cy - (h / 2.0);
-        const y_max = cy + (h / 2.0);
+        const x_min = strikeZone.cx - (strikeZone.w / 2.0);
+        const x_max = strikeZone.cx + (strikeZone.w / 2.0);
+        const y_min = strikeZone.cy - (strikeZone.h / 2.0);
+        const y_max = strikeZone.cy + (strikeZone.h / 2.0);
 
         const px = currentPitchData.plate_crossing.x;
         const py = currentPitchData.plate_crossing.y;
-        const ballR = 12.0;
+        const ballR = 14.0;
 
         const isStrike = (px >= x_min - ballR) && (px <= x_max + ballR) &&
                          (py >= y_min - ballR) && (py <= y_max + ballR);
 
         updateCallBadges(isStrike);
+        if (onScreenCallTag) {
+            onScreenCallTag.textContent = isStrike ? 'STRIKE' : 'BALL';
+            if (isStrike) {
+                onScreenCallTag.className = 'text-[10px] font-black uppercase px-1.5 py-0.5 rounded bg-pitchgreen/20 text-pitchgreen border border-pitchgreen/50 shadow-sm shadow-pitchgreen/30';
+            } else {
+                onScreenCallTag.className = 'text-[10px] font-black uppercase px-1.5 py-0.5 rounded bg-pitchred/20 text-pitchred border border-pitchred/50 shadow-sm shadow-pitchred/30';
+            }
+        }
     }
 
     function updateCallBadges(isStrike) {
@@ -210,107 +208,136 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // Sliders event listeners
-    [zoneXSlider, zoneYSlider, zoneWSlider, zoneHSlider].forEach(slider => {
-        slider.addEventListener('input', () => {
-            updateSliderLabels();
-            syncInteractiveBoxFromSliders();
-        });
-    });
-
-    // Preset buttons
-    presetBroadcastBtn.addEventListener('click', () => {
-        const vidW = currentPitchData?.video_resolution?.width || 1920;
-        const vidH = currentPitchData?.video_resolution?.height || 1080;
-        zoneXSlider.value = Math.round(vidW * 0.558);
-        zoneYSlider.value = Math.round(vidH * 0.405);
-        zoneWSlider.value = Math.round(vidW * 0.062);
-        zoneHSlider.value = Math.round(vidH * 0.116);
-        updateSliderLabels();
-        syncInteractiveBoxFromSliders();
-    });
-
-    presetMobileBtn.addEventListener('click', () => {
-        const vidW = currentPitchData?.video_resolution?.width || 384;
-        const vidH = currentPitchData?.video_resolution?.height || 848;
-        zoneXSlider.value = Math.round(vidW * 0.50);
-        zoneYSlider.value = Math.round(vidH * 0.68);
-        zoneWSlider.value = Math.round(vidW * 0.24);
-        zoneHSlider.value = Math.round(vidH * 0.17);
-        updateSliderLabels();
-        syncInteractiveBoxFromSliders();
-    });
-
     // Toggle on-screen zone editor
-    toggleZoneEditorBtn.addEventListener('click', () => {
-        isZoneEditorOpen = !isZoneEditorOpen;
+    function setZoneEditorOpen(open) {
+        isZoneEditorOpen = open;
         if (isZoneEditorOpen) {
             interactiveZoneBox.classList.remove('hidden');
             zoneEditorToggleText.textContent = 'Hide Box';
             toggleZoneEditorBtn.classList.add('bg-pitchgold', 'text-black');
             toggleZoneEditorBtn.classList.remove('bg-gray-800', 'text-pitchgold');
-            syncInteractiveBoxFromSliders();
+            syncInteractiveBox();
         } else {
             interactiveZoneBox.classList.add('hidden');
-            zoneEditorToggleText.textContent = 'Edit Zone';
+            zoneEditorToggleText.textContent = 'Position On Screen';
             toggleZoneEditorBtn.classList.remove('bg-pitchgold', 'text-black');
             toggleZoneEditorBtn.classList.add('bg-gray-800', 'text-pitchgold');
         }
+    }
+
+    const videoZoneToggleBtn = document.getElementById('videoZoneToggleBtn');
+
+    toggleZoneEditorBtn.addEventListener('click', () => {
+        setZoneEditorOpen(!isZoneEditorOpen);
     });
 
-    // 8. Drag and Resize Interactivity on Video Box
-    let isDraggingZone = false;
-    let isResizingZone = false;
+    videoZoneToggleBtn?.addEventListener('click', () => {
+        setZoneEditorOpen(!isZoneEditorOpen);
+    });
+
+    onScreenCloseBtn?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        setZoneEditorOpen(false);
+    });
+
+    // Preset buttons
+    presetBroadcastBtn?.addEventListener('click', () => {
+        const vidW = currentPitchData?.video_resolution?.width || 1920;
+        const vidH = currentPitchData?.video_resolution?.height || 1080;
+        strikeZone = {
+            cx: Math.round(vidW * 0.558),
+            cy: Math.round(vidH * 0.405),
+            w: Math.round(vidW * 0.062),
+            h: Math.round(vidH * 0.116),
+        };
+        setZoneEditorOpen(true);
+        syncInteractiveBox();
+    });
+
+    presetBowlerBtn?.addEventListener('click', () => {
+        const vidW = currentPitchData?.video_resolution?.width || 478;
+        const vidH = currentPitchData?.video_resolution?.height || 850;
+        strikeZone = {
+            cx: Math.round(vidW * 0.52),
+            cy: Math.round(vidH * 0.42),
+            w: Math.round(vidW * 0.18),
+            h: Math.round(vidH * 0.20),
+        };
+        setZoneEditorOpen(true);
+        syncInteractiveBox();
+    });
+
+    presetMobileBtn?.addEventListener('click', () => {
+        const vidW = currentPitchData?.video_resolution?.width || 384;
+        const vidH = currentPitchData?.video_resolution?.height || 848;
+        strikeZone = {
+            cx: Math.round(vidW * 0.50),
+            cy: Math.round(vidH * 0.68),
+            w: Math.round(vidW * 0.24),
+            h: Math.round(vidH * 0.17),
+        };
+        setZoneEditorOpen(true);
+        syncInteractiveBox();
+    });
+
+    // 8. Pure Direct On-Screen Drag and 4-Corner Resizing
+    let activeAction = null; // 'drag', 'nw', 'ne', 'sw', 'se'
     let startMouseX = 0;
     let startMouseY = 0;
-    let origCx = 0;
-    let origCy = 0;
-    let origW = 0;
-    let origH = 0;
+    let startZone = { cx: 0, cy: 0, w: 0, h: 0 };
 
     interactiveZoneBox.addEventListener('mousedown', (e) => {
-        if (e.target === zoneResizeHandle) {
-            isResizingZone = true;
+        if (e.target.closest('#onScreenApplyBtn') || e.target.closest('#onScreenCloseBtn')) {
+            return;
+        }
+        const handle = e.target.getAttribute('data-handle');
+        if (handle) {
+            activeAction = handle;
         } else {
-            isDraggingZone = true;
+            activeAction = 'drag';
         }
         startMouseX = e.clientX;
         startMouseY = e.clientY;
-        origCx = parseFloat(zoneXSlider.value);
-        origCy = parseFloat(zoneYSlider.value);
-        origW = parseFloat(zoneWSlider.value);
-        origH = parseFloat(zoneHSlider.value);
+        startZone = { ...strikeZone };
         e.preventDefault();
     });
 
     window.addEventListener('mousemove', (e) => {
-        if (!isDraggingZone && !isResizingZone) return;
+        if (!activeAction) return;
         const geom = getVideoRenderedGeometry();
-        const deltaX = (e.clientX - startMouseX) * (geom.vidW / geom.renderW);
-        const deltaY = (e.clientY - startMouseY) * (geom.vidH / geom.renderH);
+        const deltaVidX = (e.clientX - startMouseX) * (geom.vidW / geom.renderW);
+        const deltaVidY = (e.clientY - startMouseY) * (geom.vidH / geom.renderH);
 
-        if (isDraggingZone) {
-            const newCx = Math.max(50, Math.min(geom.vidW - 50, origCx + deltaX));
-            const newCy = Math.max(50, Math.min(geom.vidH - 50, origCy + deltaY));
-            zoneXSlider.value = Math.round(newCx);
-            zoneYSlider.value = Math.round(newCy);
-        } else if (isResizingZone) {
-            const newW = Math.max(40, Math.min(400, origW + deltaX * 2));
-            const newH = Math.max(40, Math.min(400, origH + deltaY * 2));
-            zoneWSlider.value = Math.round(newW);
-            zoneHSlider.value = Math.round(newH);
+        if (activeAction === 'drag') {
+            strikeZone.cx = Math.max(10, Math.min(geom.vidW - 10, startZone.cx + deltaVidX));
+            strikeZone.cy = Math.max(10, Math.min(geom.vidH - 10, startZone.cy + deltaVidY));
+        } else if (activeAction === 'se') {
+            strikeZone.w = Math.max(25, Math.min(geom.vidW, startZone.w + deltaVidX * 2));
+            strikeZone.h = Math.max(25, Math.min(geom.vidH, startZone.h + deltaVidY * 2));
+        } else if (activeAction === 'sw') {
+            strikeZone.w = Math.max(25, Math.min(geom.vidW, startZone.w - deltaVidX * 2));
+            strikeZone.h = Math.max(25, Math.min(geom.vidH, startZone.h + deltaVidY * 2));
+        } else if (activeAction === 'ne') {
+            strikeZone.w = Math.max(25, Math.min(geom.vidW, startZone.w + deltaVidX * 2));
+            strikeZone.h = Math.max(25, Math.min(geom.vidH, startZone.h - deltaVidY * 2));
+        } else if (activeAction === 'nw') {
+            strikeZone.w = Math.max(25, Math.min(geom.vidW, startZone.w - deltaVidX * 2));
+            strikeZone.h = Math.max(25, Math.min(geom.vidH, startZone.h - deltaVidY * 2));
         }
-        updateSliderLabels();
-        syncInteractiveBoxFromSliders();
+
+        syncInteractiveBox();
     });
 
     window.addEventListener('mouseup', () => {
-        isDraggingZone = false;
-        isResizingZone = false;
+        activeAction = null;
     });
 
     window.addEventListener('resize', () => {
-        syncInteractiveBoxFromSliders();
+        syncInteractiveBox();
+    });
+
+    video.addEventListener('loadedmetadata', () => {
+        syncInteractiveBox();
     });
 
     // 9. Update UI with Telemetry Results
@@ -346,26 +373,22 @@ document.addEventListener('DOMContentLoaded', () => {
         sidePitchType.textContent = tag;
         pitchNumberBadge.textContent = `Pitch #${data.pitch_number || 1}`;
 
-        // Strike Zone sliders sync
+        // Strike Zone synchronization
         if (data.strike_zone) {
             const cx = (data.strike_zone.x_min + data.strike_zone.x_max) / 2.0;
             const cy = (data.strike_zone.y_min + data.strike_zone.y_max) / 2.0;
             const w = data.strike_zone.x_max - data.strike_zone.x_min;
             const h = data.strike_zone.y_max - data.strike_zone.y_min;
-
-            const maxW = data.video_resolution?.width || 1920;
-            const maxH = data.video_resolution?.height || 1080;
-
-            zoneXSlider.max = maxW;
-            zoneYSlider.max = maxH;
-            zoneXSlider.value = Math.round(cx);
-            zoneYSlider.value = Math.round(cy);
-            zoneWSlider.value = Math.round(w);
-            zoneHSlider.value = Math.round(h);
-            updateSliderLabels();
-            syncInteractiveBoxFromSliders();
+            strikeZone = { cx, cy, w, h };
+            syncInteractiveBox();
         }
 
+        if (data.ball_type && ballTypeSelect) {
+            ballTypeSelect.value = data.ball_type;
+        }
+        if (data.perspective && perspectiveSelect) {
+            perspectiveSelect.value = data.perspective;
+        }
         if (data.graphic_style) {
             graphicStyleSelect.value = data.graphic_style;
         }
@@ -381,7 +404,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // 10. Fast Re-Render on Strike Zone / Theme Change
-    applyZoneBtn.addEventListener('click', async () => {
+    async function applyStrikeZoneChanges() {
         if (!currentPitchData || !currentPitchData.trajectory) {
             alert('Please load or upload a pitch video first.');
             return;
@@ -389,23 +412,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
         loadingOverlay.classList.remove('hidden');
 
-        const cx = parseFloat(zoneXSlider.value);
-        const cy = parseFloat(zoneYSlider.value);
-        const w = parseFloat(zoneWSlider.value);
-        const h = parseFloat(zoneHSlider.value);
         const style = graphicStyleSelect.value;
+        const ballType = ballTypeSelect?.value || 'auto';
+        const perspective = perspectiveSelect?.value || 'auto';
 
         const payload = {
             video_id: currentPitchData.video_id || 'sample',
             trajectory: currentPitchData.trajectory,
             distance_ft: getSelectedDistance(),
             custom_strike_zone: {
-                x_min: cx - (w / 2.0),
-                y_min: cy - (h / 2.0),
-                x_max: cx + (w / 2.0),
-                y_max: cy + (h / 2.0),
+                x_min: strikeZone.cx - (strikeZone.w / 2.0),
+                y_min: strikeZone.cy - (strikeZone.h / 2.0),
+                x_max: strikeZone.cx + (strikeZone.w / 2.0),
+                y_max: strikeZone.cy + (strikeZone.h / 2.0),
             },
             graphic_style: style,
+            ball_type: ballType,
+            perspective: perspective,
             pitch_number: currentPitchData.pitch_number || 1
         };
 
@@ -424,10 +447,16 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await res.json();
             updateTelemetry(data);
         } catch (err) {
-            alert('Re-render note: ' + err.message);
+            alert('Re-render error: ' + err.message);
         } finally {
             loadingOverlay.classList.add('hidden');
         }
+    }
+
+    applyZoneBtn?.addEventListener('click', applyStrikeZoneChanges);
+    onScreenApplyBtn?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        applyStrikeZoneChanges();
     });
 
     // 11. Upload Video Workflow
@@ -438,6 +467,8 @@ document.addEventListener('DOMContentLoaded', () => {
         formData.append('distance_ft', getSelectedDistance());
         formData.append('pitch_number', 1);
         formData.append('graphic_style', graphicStyleSelect.value);
+        formData.append('ball_type', ballTypeSelect?.value || 'auto');
+        formData.append('perspective', perspectiveSelect?.value || 'auto');
 
         try {
             const response = await fetch('/api/process', {

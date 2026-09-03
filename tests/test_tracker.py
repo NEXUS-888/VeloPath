@@ -26,3 +26,55 @@ def test_smooth_trajectory_reduces_jitter():
     smoothed = smooth_trajectory(raw_points)
     assert len(smoothed) == len(raw_points)
     assert smoothed[0].frame_idx == raw_points[0].frame_idx
+
+
+def test_detect_color_motion_ball_synthetic():
+    """Verify adaptive color and motion differencing extracts a moving yellow tennis ball."""
+    import numpy as np
+    import cv2
+    from velopath.tracker import PitchTracker
+
+    tracker = PitchTracker()
+    # Create synthetic frame with yellow ball
+    frame = np.full((400, 400, 3), 100, dtype=np.uint8)
+    prev_frame = np.full((400, 400, 3), 100, dtype=np.uint8)
+
+    # Ball in prev_frame at (190, 190)
+    cv2.circle(prev_frame, (190, 190), 8, (30, 220, 220), -1)
+    # Ball moved in frame to (210, 210) (yellow BGR: ~30, 220, 220)
+    cv2.circle(frame, (210, 210), 8, (30, 220, 220), -1)
+
+    cand = tracker.detect_color_motion_ball(
+        frame=frame,
+        prev_frame=prev_frame,
+        corridor=(100, 300, 100, 300),
+        ball_type="tennis_cricket"
+    )
+    assert cand is not None
+    cx, cy, r, conf = cand
+    assert pytest.approx(cx, abs=5.0) == 210.0
+    assert pytest.approx(cy, abs=5.0) == 210.0
+    assert r > 2.0
+
+
+def test_extrapolate_measured_flight():
+    """Verify ballistic extrapolation extends measured points to the plate."""
+    from velopath.tracker import PitchTracker
+
+    tracker = PitchTracker()
+    measured = [
+        TrajectoryPoint(frame_idx=10, x=300.0, y=400.0, conf=0.8),
+        TrajectoryPoint(frame_idx=11, x=302.0, y=380.0, conf=0.8),
+        TrajectoryPoint(frame_idx=12, x=304.0, y=360.0, conf=0.8),
+    ]
+    extrapolated = tracker._extrapolate_measured_flight(
+        points=measured,
+        perspective="behind_pitcher",
+        width=500,
+        height=800,
+        fps=30.0
+    )
+    assert len(extrapolated) > len(measured)
+    # Should travel upward into target
+    assert extrapolated[-1].y < measured[-1].y
+    assert extrapolated[-1].frame_idx > measured[-1].frame_idx
