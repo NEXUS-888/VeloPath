@@ -1,4 +1,4 @@
-﻿// ==========================================================================
+// ==========================================================================
 // VeloPath AI Studio - Frontend Application Controller
 // ==========================================================================
 
@@ -29,6 +29,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // Telemetry Elements
     const heroVelocityVal = document.getElementById('heroVelocityVal');
     const heroVelocityKmh = document.getElementById('heroVelocityKmh');
+    const plateVelocityVal = document.getElementById('plateVelocityVal');
+    const plateVelocityKmh = document.getElementById('plateVelocityKmh');
+    const dragLossPct = document.getElementById('dragLossPct');
+    const coveragePct = document.getElementById('coveragePct');
     const flightTimeVal = document.getElementById('flightTimeVal');
     const vertBreakVal = document.getElementById('vertBreakVal');
     const horzBreakVal = document.getElementById('horzBreakVal');
@@ -171,6 +175,15 @@ document.addEventListener('DOMContentLoaded', () => {
             customDistanceRow.classList.remove('hidden');
         } else {
             customDistanceRow.classList.add('hidden');
+            if (currentPitchData) {
+                applyStrikeZoneChanges();
+            }
+        }
+    });
+
+    customDistanceInput.addEventListener('change', () => {
+        if (currentPitchData) {
+            applyStrikeZoneChanges();
         }
     });
 
@@ -429,9 +442,19 @@ document.addEventListener('DOMContentLoaded', () => {
         // Dismiss empty state
         if (emptyState) emptyState.classList.add('hidden');
 
-        // Hero Velocity
+        // Hero Velocity (Release & Plate with Drag)
         heroVelocityVal.textContent = data.velocity_mph.toFixed(1);
         heroVelocityKmh.textContent = (data.velocity_kmh || (data.velocity_mph * 1.60934)).toFixed(1);
+
+        const plateMph = data.plate_velocity_mph || (data.velocity_mph * 0.95);
+        const plateKmh = data.plate_velocity_kmh || (plateMph * 1.60934);
+        if (plateVelocityVal) plateVelocityVal.textContent = plateMph.toFixed(1);
+        if (plateVelocityKmh) plateVelocityKmh.textContent = plateKmh.toFixed(1);
+
+        const dragLoss = ((data.velocity_mph - plateMph) / Math.max(1, data.velocity_mph)) * 100.0;
+        if (dragLossPct) dragLossPct.textContent = `-${dragLoss.toFixed(1)}%`;
+        const covPct = Math.round((data.coverage_fraction || 1.0) * 100);
+        if (coveragePct) coveragePct.textContent = `${covPct}%`;
 
         // Kinematics Micro-Cards
         flightTimeVal.textContent = Math.round(data.flight_time_ms);

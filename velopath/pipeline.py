@@ -7,7 +7,15 @@ import cv2
 import numpy as np
 
 from velopath.tracker import PitchTracker, TrajectoryPoint, interpolate_missing_frames, smooth_trajectory
-from velopath.physics import calculate_velocity_mph, calculate_velocity_kmh, calculate_flight_time_ms, calculate_pitch_break, classify_pitch_type
+from velopath.physics import (
+    calculate_velocity_mph,
+    calculate_velocity_kmh,
+    calculate_flight_time_ms,
+    calculate_pitch_break,
+    classify_pitch_type,
+    calculate_advanced_velocity,
+    estimate_trajectory_coverage,
+)
 from velopath.strike_zone import StrikeZone, evaluate_pitch, PitchCallResult
 from velopath.renderer import PitchRenderer
 
@@ -60,44 +68,21 @@ def process_pitch_video(
             for f in range(150, 210)
         ]
 
-    # Isolate true airborne ball flight using maximum translational displacement window
-    target_frames = max(8, min(int(round(0.44 * fps)), len(trajectory_points)))
-    if len(trajectory_points) > target_frames:
+    # Only trim if trajectory is excessively long (> 1.5 seconds)
+    max_flight_frames = int(round(1.5 * fps))
+    if len(trajectory_points) > max_flight_frames:
         best_disp = -1
         best_idx = 0
-        for i in range(len(trajectory_points) - target_frames + 1):
+        for i in range(len(trajectory_points) - max_flight_frames + 1):
             p0 = trajectory_points[i]
-            p1 = trajectory_points[i + target_frames - 1]
+            p1 = trajectory_points[i + max_flight_frames - 1]
             disp = (p1.x - p0.x)**2 + (p1.y - p0.y)**2
             if disp > best_disp:
                 best_disp = disp
                 best_idx = i
-        trajectory_points = trajectory_points[best_idx : best_idx + target_frames]
+        trajectory_points = trajectory_points[best_idx : best_idx + max_flight_frames]
 
-    # 2. Timing & Velocity
-    release_frame = trajectory_points[0].frame_idx
-    plate_frame = trajectory_points[-1].frame_idx
-    elapsed_frames = max(1, plate_frame - release_frame)
-    flight_time_s = elapsed_frames / fps
-
-    # Statcast baseball standard: account for pitcher release extension (5.5 ft)
-    if distance_ft >= 55.0:
-        flight_distance_ft = distance_ft - 5.5
-        velocity_mph = round((flight_distance_ft / flight_time_s) * (3600.0 / 5280.0) * 1.04, 1)
-    else:
-        velocity_mph = calculate_velocity_mph(distance_ft, elapsed_frames, fps)
-
-    velocity_kmh = calculate_velocity_kmh(velocity_mph)
-    flight_time_ms = calculate_flight_time_ms(elapsed_frames, fps)
-
-    # 3. Pitch Movement & Break
-    coords = [(p.x, p.y) for p in trajectory_points]
-    # Spatial pixel scale
-    px_per_in = max(0.5, (height * 0.15) / 17.0)
-    horz_break_in, vert_break_in = calculate_pitch_break(coords, pixels_per_inch=px_per_in)
-    pitch_tag = classify_pitch_type(velocity_mph, vert_break_in, horz_break_in)
-
-    # 4. Calibrated Strike Zone (Broadcast center-field vs Mobile perspective)
+    # 2. Calibrated Strike Zone (Broadcast center-field vs Mobile perspective)
     if custom_strike_zone:
         strike_zone = StrikeZone(
             x_min=custom_strike_zone["x_min"],
@@ -107,6 +92,46 @@ def process_pitch_video(
         )
     else:
         strike_zone = StrikeZone.get_preset_zone(width, height, view_type=perspective)
+
+    # 3. Physically Grounded Timing & Aerodynamic Velocity
+    release_frame = trajectory_points[0].frame_idx
+    plate_frame = trajectory_points[-1].frame_idx
+    elapsed_frames = max(1, plate_frame - release_frame)
+
+    # Estimate trajectory coverage fraction across the pitch corridor
+    plate_center_y = (strike_zone.y_min + strike_zone.y_max) / 2.0
+    if perspective == "behind_pitcher":
+        release_ref_y = height * 0.60
+    elif perspective == "broadcast":
+        release_ref_y = height * 0.35
+    else:
+        release_ref_y = trajectory_points[0].y
+
+    cov = estimate_trajectory_coverage(
+        trajectory_points=[(p.x, p.y) for p in trajectory_points],
+        tunnel_start_y=release_ref_y,
+        tunnel_end_y=plate_center_y
+    )
+
+    vel_data = calculate_advanced_velocity(
+        distance_ft=distance_ft,
+        elapsed_frames=float(elapsed_frames),
+        fps=fps,
+        coverage_fraction=cov,
+        ball_type=ball_type
+    )
+
+    velocity_mph = vel_data["release_velocity_mph"]
+    velocity_kmh = vel_data["release_velocity_kmh"]
+    plate_velocity_mph = vel_data["plate_velocity_mph"]
+    plate_velocity_kmh = vel_data["plate_velocity_kmh"]
+    flight_time_ms = vel_data["flight_time_ms"]
+
+    # 4. Pitch Movement & Break
+    coords = [(p.x, p.y) for p in trajectory_points]
+    px_per_in = max(0.5, (height * 0.15) / 17.0)
+    horz_break_in, vert_break_in = calculate_pitch_break(coords, pixels_per_inch=px_per_in)
+    pitch_tag = classify_pitch_type(velocity_mph, vert_break_in, horz_break_in)
 
     # Evaluate crossing point
     plate_pt = (trajectory_points[-1].x, trajectory_points[-1].y)
@@ -141,7 +166,12 @@ def process_pitch_video(
         "pitch_number": pitch_number,
         "velocity_mph": velocity_mph,
         "velocity_kmh": velocity_kmh,
+        "plate_velocity_mph": plate_velocity_mph,
+        "plate_velocity_kmh": plate_velocity_kmh,
         "flight_time_ms": flight_time_ms,
+        "effective_distance_ft": vel_data["effective_distance_ft"],
+        "coverage_fraction": vel_data["coverage_fraction"],
+        "sport": vel_data["sport"],
         "vert_break_in": vert_break_in,
         "horz_break_in": horz_break_in,
         "pitch_tag": pitch_tag,
@@ -250,31 +280,50 @@ def rerender_pitch(
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     cap.release()
 
-    release_frame = pts[0].frame_idx
-    plate_frame = pts[-1].frame_idx
-    elapsed_frames = max(1, plate_frame - release_frame)
-    flight_time_s = elapsed_frames / fps
-
-    if distance_ft >= 55.0:
-        flight_distance_ft = distance_ft - 5.5
-        velocity_mph = round((flight_distance_ft / flight_time_s) * (3600.0 / 5280.0) * 1.04, 1)
-    else:
-        velocity_mph = calculate_velocity_mph(distance_ft, elapsed_frames, fps)
-
-    velocity_kmh = calculate_velocity_kmh(velocity_mph)
-    flight_time_ms = calculate_flight_time_ms(elapsed_frames, fps)
-
-    coords = [(p.x, p.y) for p in pts]
-    px_per_in = max(0.5, (height * 0.15) / 17.0)
-    horz_break_in, vert_break_in = calculate_pitch_break(coords, pixels_per_inch=px_per_in)
-    pitch_tag = classify_pitch_type(velocity_mph, vert_break_in, horz_break_in)
-
     strike_zone = StrikeZone(
         x_min=float(custom_strike_zone["x_min"]),
         y_min=float(custom_strike_zone["y_min"]),
         x_max=float(custom_strike_zone["x_max"]),
         y_max=float(custom_strike_zone["y_max"]),
     )
+
+    release_frame = pts[0].frame_idx
+    plate_frame = pts[-1].frame_idx
+    elapsed_frames = max(1, plate_frame - release_frame)
+
+    # Estimate trajectory coverage fraction across the pitch corridor
+    plate_center_y = (strike_zone.y_min + strike_zone.y_max) / 2.0
+    if perspective == "behind_pitcher":
+        release_ref_y = height * 0.60
+    elif perspective == "broadcast":
+        release_ref_y = height * 0.35
+    else:
+        release_ref_y = pts[0].y
+
+    cov = estimate_trajectory_coverage(
+        trajectory_points=[(p.x, p.y) for p in pts],
+        tunnel_start_y=release_ref_y,
+        tunnel_end_y=plate_center_y
+    )
+
+    vel_data = calculate_advanced_velocity(
+        distance_ft=distance_ft,
+        elapsed_frames=float(elapsed_frames),
+        fps=fps,
+        coverage_fraction=cov,
+        ball_type=ball_type
+    )
+
+    velocity_mph = vel_data["release_velocity_mph"]
+    velocity_kmh = vel_data["release_velocity_kmh"]
+    plate_velocity_mph = vel_data["plate_velocity_mph"]
+    plate_velocity_kmh = vel_data["plate_velocity_kmh"]
+    flight_time_ms = vel_data["flight_time_ms"]
+
+    coords = [(p.x, p.y) for p in pts]
+    px_per_in = max(0.5, (height * 0.15) / 17.0)
+    horz_break_in, vert_break_in = calculate_pitch_break(coords, pixels_per_inch=px_per_in)
+    pitch_tag = classify_pitch_type(velocity_mph, vert_break_in, horz_break_in)
 
     plate_pt = (pts[-1].x, pts[-1].y)
     call_result = evaluate_pitch(
@@ -307,7 +356,12 @@ def rerender_pitch(
         "pitch_number": pitch_number,
         "velocity_mph": velocity_mph,
         "velocity_kmh": velocity_kmh,
+        "plate_velocity_mph": plate_velocity_mph,
+        "plate_velocity_kmh": plate_velocity_kmh,
         "flight_time_ms": flight_time_ms,
+        "effective_distance_ft": vel_data["effective_distance_ft"],
+        "coverage_fraction": vel_data["coverage_fraction"],
+        "sport": vel_data["sport"],
         "vert_break_in": vert_break_in,
         "horz_break_in": horz_break_in,
         "pitch_tag": pitch_tag,
