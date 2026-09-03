@@ -1,9 +1,9 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en" class="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VeloPath AI - Baseball Pitch Trajectory, Velocity & Strike Zone System</title>
+    <title>VeloPath AI Studio - Baseball & Cricket Pitch Analytics & Automated Strike Zone</title>
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -12,12 +12,14 @@
             theme: {
                 extend: {
                     colors: {
+                        pitchcyan: '#00E5FF',
                         pitchgold: '#FFB800',
-                        pitchorange: '#FF7A00',
                         pitchgreen: '#00E676',
-                        pitchred: '#FF3D00',
-                        pitchdark: '#0C0D14',
-                        pitchcard: '#161822',
+                        pitchred: '#FF334B',
+                        pitchviolet: '#D946EF',
+                        pitchdark: '#0B0E14',
+                        pitchsurface: '#121620',
+                        pitchcard: 'rgba(18, 22, 32, 0.85)',
                     }
                 }
             }
@@ -27,87 +29,109 @@
     <script src="https://unpkg.com/lucide@latest"></script>
     <link rel="stylesheet" href="/static/style.css">
 </head>
-<body class="bg-pitchdark text-gray-100 min-h-screen flex flex-col font-sans antialiased selection:bg-pitchgold selection:text-black">
+<body class="bg-pitchdark text-slate-100 min-h-screen flex flex-col font-sans antialiased selection:bg-pitchcyan selection:text-black">
 
-    <!-- Top Navigation -->
-    <header class="border-b border-gray-800 bg-pitchdark/80 backdrop-blur-md sticky top-0 z-50">
-        <div class="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
+    <!-- Top Navigation Header -->
+    <header class="border-b border-white/10 bg-pitchdark/90 backdrop-blur-xl sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+            
+            <!-- Brand & App Identity -->
             <div class="flex items-center space-x-3">
-                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-pitchorange to-pitchgold flex items-center justify-center shadow-lg shadow-pitchgold/20">
-                    <i data-lucide="zap" class="w-6 h-6 text-black font-black"></i>
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-600 via-pitchcyan to-teal-300 flex items-center justify-center shadow-lg shadow-pitchcyan/20">
+                    <i data-lucide="activity" class="w-6 h-6 text-black font-black"></i>
                 </div>
                 <div>
-                    <h1 class="font-bold text-lg tracking-wide flex items-center gap-2">
-                        Velo<span class="text-pitchgold">Path</span>
-                        <span class="text-xs px-2 py-0.5 rounded-full bg-pitchgold/10 text-pitchgold border border-pitchgold/30">Statcast & ABS</span>
+                    <h1 class="font-bold text-lg tracking-tight flex items-center gap-2">
+                        <span>Velo<span class="text-pitchcyan">Path</span></span>
+                        <span class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-pitchcyan/10 text-pitchcyan border border-pitchcyan/30 tracking-wide uppercase">Studio</span>
                     </h1>
-                    <p class="text-xs text-gray-400">Computer Vision Pitch Tracking & Automated Strike Zone</p>
+                    <p class="text-[11px] text-slate-400">Computer Vision Pitch Kinematics & Automated Strike Zone</p>
                 </div>
             </div>
+
+            <!-- Hardware & Action Header Items -->
             <div class="flex items-center gap-3">
-                <button id="samplePitchBtn" class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-sm font-medium border border-gray-700 transition">
-                    <i data-lucide="play-circle" class="w-4 h-4 text-pitchgold"></i>
-                    <span>Load Demo Pitch</span>
+                <!-- Hardware Badge -->
+                <div id="hardwareBadge" class="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-900 border border-white/10 text-[11px] font-medium text-slate-300">
+                    <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse-dot"></span>
+                    <span id="hardwareText">AI Engine Ready</span>
+                </div>
+
+                <div class="h-4 w-px bg-white/10 hidden sm:block"></div>
+
+                <!-- Load Demo Pitch -->
+                <button id="samplePitchBtn" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-xs font-semibold text-slate-200 border border-white/10 shadow-sm transition">
+                    <i data-lucide="play-circle" class="w-4 h-4 text-pitchcyan"></i>
+                    <span>Demo Pitch</span>
                 </button>
-                <div class="h-4 w-px bg-gray-700"></div>
-                <label for="videoUploadInput" class="flex items-center gap-2 px-4 py-1.5 rounded-lg bg-gradient-to-r from-pitchgold to-pitchorange hover:opacity-90 text-black font-semibold text-sm shadow-md shadow-pitchgold/20 cursor-pointer transition">
-                    <i data-lucide="upload-cloud" class="w-4 h-4"></i>
-                    <span>Upload Video</span>
+
+                <!-- Upload Video Button -->
+                <label for="videoUploadInput" class="flex items-center gap-2 px-4 py-1.5 rounded-lg bg-gradient-to-r from-pitchcyan to-cyan-400 hover:opacity-95 text-black font-bold text-xs shadow-md shadow-pitchcyan/20 cursor-pointer transition btn-tactile">
+                    <i data-lucide="upload" class="w-4 h-4"></i>
+                    <span>Upload Pitch</span>
                 </label>
                 <input type="file" id="videoUploadInput" accept="video/*" class="hidden">
+
+                <!-- Keyboard Shortcuts Help -->
+                <button id="helpModalBtn" title="Keyboard Shortcuts" class="p-1.5 rounded-lg bg-slate-800/60 hover:bg-slate-700 text-slate-400 hover:text-white transition">
+                    <i data-lucide="help-circle" class="w-4 h-4"></i>
+                </button>
             </div>
         </div>
     </header>
 
-    <!-- Main Content -->
-    <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+    <!-- Main Workspace -->
+    <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 grid grid-cols-1 xl:grid-cols-12 gap-6">
 
-        <!-- Left Column: Video Player & Pitch Lab Ribbon Preview (8 cols) -->
-        <div class="lg:col-span-8 flex flex-col gap-4">
+        <!-- Left Column: Video Stage & Modern Media Deck (8 cols on XL) -->
+        <div class="xl:col-span-8 flex flex-col gap-4">
             
-            <!-- Video Display Container -->
-            <div class="relative bg-black rounded-2xl overflow-hidden border border-gray-800 shadow-2xl aspect-[9/16] sm:aspect-[4/3] md:aspect-[16/9] max-h-[72vh] flex items-center justify-center group">
-                <video id="pitchVideo" class="w-full h-full object-contain" playsinline preload="none" controls>
+            <!-- Video Viewport Container -->
+            <div class="video-viewport-wrapper relative aspect-[16/9] max-h-[72vh] flex items-center justify-center group bg-black" id="videoDropZone">
+                <video id="pitchVideo" class="w-full h-full object-contain" playsinline preload="metadata">
                     <source id="videoSource" src="" type="video/mp4">
                     Your browser does not support HTML5 video.
                 </video>
 
-                <!-- Initial Empty State Placeholder -->
-                <div id="emptyState" class="absolute inset-0 flex flex-col items-center justify-center bg-gray-950/90 z-10 p-6 text-center">
-                    <div class="w-16 h-16 rounded-2xl bg-gray-900 border border-gray-800 flex items-center justify-center mb-4 text-pitchgold shadow-lg shadow-pitchgold/10">
-                        <i data-lucide="video" class="w-8 h-8"></i>
+                <!-- Initial Empty State / Dropzone -->
+                <div id="emptyState" class="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/95 z-10 p-6 text-center">
+                    <div class="w-16 h-16 rounded-2xl bg-slate-900 border border-white/10 flex items-center justify-center mb-4 text-pitchcyan shadow-xl shadow-pitchcyan/10">
+                        <i data-lucide="film" class="w-8 h-8"></i>
                     </div>
-                    <h3 class="text-base font-bold text-gray-200">No Pitch Video Loaded</h3>
-                    <p class="text-xs text-gray-400 mt-1 max-w-sm">Drop your baseball or softball pitch video here, or click "Load Demo Pitch" in the top bar.</p>
-                    <div class="flex items-center gap-3 mt-4">
-                        <button onclick="document.getElementById('videoUploadInput').click()" class="px-4 py-2 rounded-lg bg-pitchgold hover:bg-pitchgold/90 text-black font-semibold text-xs transition flex items-center gap-2">
-                            <i data-lucide="upload" class="w-4 h-4"></i> Upload Pitch Video
+                    <h3 class="text-base font-bold text-white">No Pitch Loaded</h3>
+                    <p class="text-xs text-slate-400 mt-1 max-w-sm">Drag & drop your baseball or softball pitch video here, or click below to get started.</p>
+                    <div class="flex items-center gap-3 mt-5">
+                        <button onclick="document.getElementById('videoUploadInput').click()" class="px-4 py-2 rounded-xl bg-pitchcyan hover:bg-cyan-300 text-black font-bold text-xs transition flex items-center gap-2 shadow-lg shadow-pitchcyan/20">
+                            <i data-lucide="upload" class="w-4 h-4"></i> Choose File
                         </button>
-                        <button onclick="document.getElementById('samplePitchBtn').click()" class="px-4 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 font-medium text-xs border border-gray-700 transition flex items-center gap-2">
-                            <i data-lucide="play" class="w-4 h-4 text-pitchgold"></i> Demo Pitch
+                        <button onclick="document.getElementById('samplePitchBtn').click()" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs border border-white/10 transition flex items-center gap-2">
+                            <i data-lucide="play" class="w-4 h-4 text-pitchcyan"></i> Try Demo Pitch
                         </button>
                     </div>
                 </div>
 
-                <!-- Direct On-Screen Drag & Drop Strike Zone Overlay -->
-                <div id="interactiveZoneBox" class="absolute border-2 border-pitchgold bg-pitchgold/15 cursor-grab active:cursor-grabbing z-25 select-none transition-shadow hover:border-white shadow-2xl hidden" style="left: 50%; top: 45%; width: 120px; height: 130px; transform: translate(-50%, -50%);">
-                    
-                    <!-- Floating Header Pill with Actions directly on the box -->
-                    <div class="absolute -top-9 left-1/2 -translate-x-1/2 flex items-center gap-1.5 bg-black/95 backdrop-blur-md px-2.5 py-1 rounded-full border border-pitchgold/50 shadow-xl pointer-events-auto whitespace-nowrap">
-                        <span class="text-[10px] font-bold text-pitchgold tracking-wider uppercase flex items-center gap-1">
-                            <i data-lucide="move" class="w-3 h-3"></i> Strike Zone
-                        </span>
-                        <span id="onScreenCallTag" class="text-[10px] font-black uppercase px-1.5 py-0.5 rounded bg-pitchgreen/20 text-pitchgreen border border-pitchgreen/40">READY</span>
-                        <button id="onScreenApplyBtn" type="button" class="ml-1 text-[10px] font-bold bg-pitchgold hover:bg-white text-black px-2 py-0.5 rounded-full transition flex items-center gap-1">
-                            <i data-lucide="check" class="w-2.5 h-2.5"></i> Apply
-                        </button>
-                        <button id="onScreenCloseBtn" type="button" class="text-gray-400 hover:text-white p-0.5 transition">
-                            <i data-lucide="x" class="w-3 h-3"></i>
-                        </button>
+                <!-- Client-Side Glassmorphism Live Telemetry Badge (Top-Left, Non-Obtrusive) -->
+                <div id="videoOverlayPill" class="absolute top-4 left-4 glass-pill px-3 py-1.5 rounded-xl flex items-center gap-3 z-20 pointer-events-none transition-opacity duration-300 opacity-0">
+                    <div class="flex items-center gap-1.5">
+                        <span id="overlayPitchNum" class="text-xs font-bold text-white tracking-wide">PITCH #1</span>
+                        <span id="overlayPitchTag" class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-white/10 text-pitchcyan border border-pitchcyan/30 uppercase">FASTBALL</span>
                     </div>
+                    <div class="h-3.5 w-px bg-white/20"></div>
+                    <div class="flex items-baseline gap-1">
+                        <span id="overlayVelocityVal" class="text-base font-black text-white tabular-nums">--</span>
+                        <span class="text-[10px] text-slate-400 font-semibold uppercase">MPH</span>
+                    </div>
+                </div>
 
-                    <!-- 3x3 Radar Grid -->
-                    <div class="w-full h-full grid grid-cols-3 grid-rows-3 pointer-events-none opacity-80">
+                <!-- Live Umpire Decision Ribbon (Top-Right, Non-Obtrusive) -->
+                <div id="videoOverlayCall" class="absolute top-4 right-4 glass-pill px-3 py-1.5 rounded-xl z-20 pointer-events-none transition-opacity duration-300 opacity-0">
+                    <span id="overlayCallText" class="text-xs font-black tracking-wider uppercase px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">STRIKE</span>
+                </div>
+
+                <!-- Direct Interactive Strike Zone Canvas Box (Clean Figma-Grade Overlay) -->
+                <div id="interactiveZoneBox" class="zone-canvas-box hidden" style="left: 50%; top: 50%; width: 120px; height: 130px; transform: translate(-50%, -50%);">
+                    <!-- Subtle 3x3 Radar Grid -->
+                    <div class="w-full h-full grid grid-cols-3 grid-rows-3 pointer-events-none opacity-60">
                         <div class="border-r border-b border-white/20"></div>
                         <div class="border-r border-b border-white/20"></div>
                         <div class="border-b border-white/20"></div>
@@ -119,154 +143,202 @@
                         <div></div>
                     </div>
 
-                    <!-- 4 Interactive Corner Resize Handles -->
-                    <div id="handleNW" class="zone-handle absolute -top-2 -left-2 w-3.5 h-3.5 bg-pitchgold border-2 border-white rounded-full cursor-nwse-resize shadow-md hover:scale-125 transition-transform" data-handle="nw"></div>
-                    <div id="handleNE" class="zone-handle absolute -top-2 -right-2 w-3.5 h-3.5 bg-pitchgold border-2 border-white rounded-full cursor-nesw-resize shadow-md hover:scale-125 transition-transform" data-handle="ne"></div>
-                    <div id="handleSW" class="zone-handle absolute -bottom-2 -left-2 w-3.5 h-3.5 bg-pitchgold border-2 border-white rounded-full cursor-nesw-resize shadow-md hover:scale-125 transition-transform" data-handle="sw"></div>
-                    <div id="handleSE" class="zone-handle absolute -bottom-2 -right-2 w-3.5 h-3.5 bg-pitchgold border-2 border-white rounded-full cursor-nwse-resize shadow-md hover:scale-125 transition-transform" data-handle="se"></div>
+                    <!-- 4 Precise Corner Resize Anchors -->
+                    <div id="anchorNW" class="zone-anchor" data-handle="nw"></div>
+                    <div id="anchorNE" class="zone-anchor" data-handle="ne"></div>
+                    <div id="anchorSW" class="zone-anchor" data-handle="sw"></div>
+                    <div id="anchorSE" class="zone-anchor" data-handle="se"></div>
                 </div>
 
-                <!-- Processing Overlay Spinner -->
-                <div id="loadingOverlay" class="absolute inset-0 bg-black/80 backdrop-blur-md flex flex-col items-center justify-center z-30 hidden">
-                    <div class="w-14 h-14 border-4 border-pitchgold border-t-transparent rounded-full animate-spin"></div>
-                    <p class="mt-4 text-base font-semibold text-gray-200">Tracking Trajectory & Computing Velocity...</p>
-                    <p class="text-xs text-gray-400 mt-1">Applying BaseballCV detection & Kalman spline smoothing</p>
-                </div>
-
-                <!-- Embedded Pitch Lab HUD Card (overlay on bottom of video, hidden by default) -->
-                <div id="hudCard" class="absolute bottom-4 left-4 right-4 bg-pitchdark/90 backdrop-blur-md border border-gray-700/60 rounded-xl p-4 shadow-2xl z-20 transition-all duration-300 hidden">
-                    <div class="flex items-center justify-between mb-2">
-                        <div class="flex items-center gap-2">
-                            <span id="pitchNumberBadge" class="text-sm font-bold tracking-wide text-white">Pitch #1</span>
-                            <span id="pitchTagBadge" class="text-xs px-2.5 py-0.5 rounded-full bg-yellow-950/60 text-pitchgold border border-pitchgold/40 font-medium">--</span>
-                        </div>
-                        <div id="strikeCallBadge" class="px-3 py-1 rounded-md text-xs font-black tracking-wider uppercase bg-gray-800 text-gray-400 border border-gray-700">
-                            READY
-                        </div>
+                <!-- Floating Bottom Calibration Dock (Only visible when calibrating) -->
+                <div id="zoneCalibrationDock" class="absolute bottom-4 left-1/2 -translate-x-1/2 glass-pill px-4 py-2 rounded-2xl flex items-center gap-3 z-30 shadow-2xl hidden border border-pitchcyan/40">
+                    <div class="flex items-center gap-2 text-xs font-bold text-pitchcyan">
+                        <i data-lucide="crosshair" class="w-4 h-4"></i>
+                        <span>Calibrating Strike Zone</span>
                     </div>
-
-                    <div class="grid grid-cols-4 gap-2 items-end pt-1">
-                        <!-- Velocity -->
-                        <div class="col-span-2 sm:col-span-1">
-                            <div class="text-[11px] text-gray-400 uppercase tracking-wider">Velocity</div>
-                            <div class="flex items-baseline gap-1">
-                                <span id="velocityVal" class="text-3xl sm:text-4xl font-black text-white tracking-tight">--</span>
-                                <span class="text-xs text-gray-400 font-semibold">mph</span>
-                            </div>
-                        </div>
-
-                        <!-- Vert Break -->
-                        <div>
-                            <div class="text-[11px] text-gray-400 uppercase tracking-wider">Vert Break</div>
-                            <div class="text-base sm:text-lg font-bold text-white">
-                                <span id="vertBreakVal">--</span> <span class="text-xs text-gray-400">in</span>
-                            </div>
-                        </div>
-
-                        <!-- Horz Break -->
-                        <div>
-                            <div class="text-[11px] text-gray-400 uppercase tracking-wider">Horz Break</div>
-                            <div class="text-base sm:text-lg font-bold text-white">
-                                <span id="horzBreakVal">--</span> <span class="text-xs text-gray-400">in</span>
-                            </div>
-                        </div>
-
-                        <!-- Flight Time -->
-                        <div>
-                            <div class="text-[11px] text-gray-400 uppercase tracking-wider">Flight Time</div>
-                            <div class="text-base sm:text-lg font-bold text-white">
-                                <span id="flightTimeVal">--</span> <span class="text-xs text-gray-400">ms</span>
-                            </div>
-                        </div>
-                    </div>
+                    <span id="dockCallStatus" class="text-[10px] font-black px-2 py-0.5 rounded uppercase bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">IN ZONE</span>
+                    <div class="h-4 w-px bg-white/20"></div>
+                    <button id="dockApplyBtn" class="px-3 py-1 rounded-lg bg-pitchcyan hover:bg-cyan-300 text-black text-xs font-bold transition flex items-center gap-1 shadow-md">
+                        <i data-lucide="check" class="w-3 h-3"></i> Apply
+                    </button>
+                    <button id="dockCancelBtn" class="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition">
+                        Cancel
+                    </button>
                 </div>
+
+                <!-- Processing Spinner Overlay -->
+                <div id="loadingOverlay" class="absolute inset-0 bg-black/85 backdrop-blur-md flex flex-col items-center justify-center z-40 hidden">
+                    <div class="w-12 h-12 border-3 border-pitchcyan border-t-transparent rounded-full animate-spin"></div>
+                    <p id="loadingStatusText" class="mt-4 text-sm font-bold text-white">Tracking Pitch Trajectory & Speed...</p>
+                    <p class="text-xs text-slate-400 mt-1">Applying deep learning corridor filtering & spline interpolation</p>
+                </div>
+
             </div>
 
-            <!-- Video Player Controls Bar -->
-            <div class="bg-pitchcard border border-gray-800 rounded-xl p-3 flex flex-wrap items-center justify-between gap-3 shadow-lg">
-                <!-- Playback controls -->
+            <!-- Integrated Studio Video Controller Bar -->
+            <div class="glass-panel card-outer flex flex-wrap items-center justify-between gap-3">
+                
+                <!-- Primary Media Controls -->
                 <div class="flex items-center gap-2">
-                    <button id="playPauseBtn" class="p-2.5 rounded-lg bg-pitchgold hover:bg-pitchgold/90 text-black font-bold transition">
+                    <button id="playPauseBtn" title="Play / Pause (Space)" class="p-2.5 rounded-xl bg-pitchcyan hover:bg-cyan-300 text-black font-bold transition shadow-lg shadow-pitchcyan/10 btn-tactile">
                         <i data-lucide="play" class="w-5 h-5 fill-current"></i>
                     </button>
-                    <button id="stepBackBtn" title="Step Back 1 Frame" class="p-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 transition">
+                    <button id="stepBackBtn" title="Step -1 Frame (←)" class="p-2.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 transition border border-white/10 btn-tactile">
                         <i data-lucide="skip-back" class="w-4 h-4"></i>
                     </button>
-                    <button id="stepForwardBtn" title="Step Forward 1 Frame" class="p-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 transition">
+                    <button id="stepForwardBtn" title="Step +1 Frame (→)" class="p-2.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 transition border border-white/10 btn-tactile">
                         <i data-lucide="skip-forward" class="w-4 h-4"></i>
                     </button>
                 </div>
 
-                <!-- Speed Presets -->
-                <div class="flex items-center gap-1 bg-gray-900/80 p-1 rounded-lg border border-gray-800">
-                    <span class="text-xs text-gray-500 px-2 font-medium">Speed:</span>
-                    <button data-speed="0.25" class="speed-btn px-2.5 py-1 text-xs rounded font-medium hover:bg-gray-800 transition text-gray-400">0.25x</button>
-                    <button data-speed="0.5" class="speed-btn px-2.5 py-1 text-xs rounded font-medium hover:bg-gray-800 transition text-gray-400">0.5x</button>
-                    <button data-speed="1.0" class="speed-btn px-2.5 py-1 text-xs rounded font-medium bg-pitchgold text-black font-semibold shadow">1.0x</button>
+                <!-- Video Scrubber Slider & Timestamp -->
+                <div class="flex-1 min-w-[200px] flex items-center gap-3 px-2">
+                    <span id="currentTimeDisplay" class="text-xs font-semibold text-slate-400 tabular-nums">0.00s</span>
+                    <input type="range" id="videoScrubber" min="0" max="100" value="0" step="0.1" class="flex-1 cursor-pointer">
+                    <span id="durationDisplay" class="text-xs font-semibold text-slate-400 tabular-nums">0.00s</span>
                 </div>
 
+                <!-- Playback Speed Chips -->
+                <div class="flex items-center gap-1 bg-slate-900/90 p-1 rounded-xl border border-white/10">
+                    <button data-speed="0.25" class="speed-btn px-2 py-1 text-xs rounded-lg font-medium text-slate-400 hover:text-white transition">0.25x</button>
+                    <button data-speed="0.5" class="speed-btn px-2 py-1 text-xs rounded-lg font-medium text-slate-400 hover:text-white transition">0.5x</button>
+                    <button data-speed="1.0" class="speed-btn px-2.5 py-1 text-xs rounded-lg font-bold bg-pitchcyan text-black shadow-sm transition">1.0x</button>
+                </div>
+
+                <!-- Right Utility Actions -->
                 <div class="flex items-center gap-2">
-                    <button id="videoZoneToggleBtn" type="button" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-xs font-semibold text-pitchgold border border-pitchgold/40 transition">
+                    <!-- Calibrate Strike Zone Button -->
+                    <button id="videoZoneToggleBtn" title="Calibrate Strike Zone (Z)" class="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-pitchcyan border border-pitchcyan/30 transition btn-tactile">
                         <i data-lucide="crosshair" class="w-4 h-4"></i>
-                        <span>Position Strike Zone</span>
+                        <span>Calibrate Zone</span>
                     </button>
-                    <!-- Download Processed Video -->
-                    <a id="downloadBtn" href="/api/video/pitchlab_result.mp4" download="pitchlab_tracked_pitch.mp4" class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-xs font-semibold text-gray-200 border border-gray-700 transition">
-                        <i data-lucide="download" class="w-4 h-4 text-pitchgold"></i>
-                        <span>Export MP4</span>
+
+                    <!-- HUD Toggle Button -->
+                    <button id="toggleHudBtn" title="Toggle On-Screen HUD" class="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition border border-white/10 btn-tactile">
+                        <i data-lucide="eye" class="w-4 h-4"></i>
+                    </button>
+
+                    <!-- Export MP4 -->
+                    <a id="downloadBtn" href="/api/video/velopath_sample_result.mp4" download="velopath_pitch.mp4" class="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-white border border-white/10 transition btn-tactile">
+                        <i data-lucide="download" class="w-4 h-4 text-pitchcyan"></i>
+                        <span>Export</span>
                     </a>
                 </div>
+
             </div>
 
         </div>
 
-        <!-- Right Column: Pitch Analytics & Calibration (4 cols) -->
-        <div class="lg:col-span-4 flex flex-col gap-4">
+        <!-- Right Column: Pitch Lab Inspector Panel (4 cols on XL) -->
+        <div class="xl:col-span-4 flex flex-col gap-4">
 
-            <!-- Pitch Telemetry Card -->
-            <div class="bg-pitchcard border border-gray-800 rounded-2xl p-5 shadow-xl">
-                <h3 class="font-bold text-sm text-gray-300 uppercase tracking-wider mb-4 flex items-center gap-2">
-                    <i data-lucide="activity" class="w-4 h-4 text-pitchgold"></i>
-                    <span>Pitch Telemetry</span>
-                </h3>
+            <!-- Card 1: Hero Telemetry & Umpire Call -->
+            <div class="glass-panel card-outer">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="flex items-center gap-2">
+                        <i data-lucide="gauge" class="w-4 h-4 text-pitchcyan"></i>
+                        <h3 class="text-xs font-bold text-slate-300 uppercase tracking-wider">Pitch Analytics</h3>
+                    </div>
+                    <!-- Umpire Decision Pill -->
+                    <span id="sideCallBadge" class="text-xs font-black uppercase px-2.5 py-0.5 rounded-md bg-slate-800 text-slate-400 border border-white/10">
+                        READY
+                    </span>
+                </div>
 
-                <div class="space-y-3">
-                    <div class="flex items-center justify-between p-3 rounded-xl bg-gray-900/60 border border-gray-800">
-                        <span class="text-sm text-gray-400">Umpire Decision</span>
-                        <span id="sideCallBadge" class="text-xs font-black uppercase px-2.5 py-1 rounded bg-gray-800 text-gray-400 border border-gray-700">
-                            READY
-                        </span>
+                <!-- Hero Velocity Display -->
+                <div class="p-4 rounded-xl bg-slate-900/80 border border-white/10 flex items-baseline justify-between mb-4">
+                    <div>
+                        <span class="text-[11px] uppercase tracking-wider font-semibold text-slate-400 block mb-0.5">Release Velocity</span>
+                        <div class="flex items-baseline gap-1.5">
+                            <span id="heroVelocityVal" class="text-4xl sm:text-5xl font-black text-white tracking-tight tabular-nums">--</span>
+                            <span class="text-sm font-bold text-pitchcyan">MPH</span>
+                        </div>
                     </div>
-                    <div class="flex items-center justify-between p-3 rounded-xl bg-gray-900/60 border border-gray-800">
-                        <span class="text-sm text-gray-400">Release Velocity</span>
-                        <span class="text-sm font-bold text-white"><span id="sideVelocityMph">--</span> MPH (<span id="sideVelocityKmh">--</span> km/h)</span>
+                    <div class="text-right">
+                        <span class="text-[11px] uppercase tracking-wider font-semibold text-slate-400 block mb-0.5">Metric</span>
+                        <span class="text-sm font-bold text-slate-300 tabular-nums"><span id="heroVelocityKmh">--</span> km/h</span>
                     </div>
-                    <div class="flex items-center justify-between p-3 rounded-xl bg-gray-900/60 border border-gray-800">
-                        <span class="text-sm text-gray-400">Total Flight Time</span>
-                        <span id="sideFlightTime" class="text-sm font-bold text-white">-- ms</span>
+                </div>
+
+                <!-- 4-Grid Telemetry Micro-Cards -->
+                <div class="grid grid-cols-2 gap-2.5">
+                    <!-- Flight Time -->
+                    <div class="p-3 rounded-xl bg-slate-900/60 border border-white/5">
+                        <span class="text-[10px] uppercase tracking-wider font-semibold text-slate-400 block mb-1">Flight Time</span>
+                        <div class="text-base font-bold text-white tabular-nums">
+                            <span id="flightTimeVal">--</span> <span class="text-xs text-slate-400 font-normal">ms</span>
+                        </div>
                     </div>
-                    <div class="flex items-center justify-between p-3 rounded-xl bg-gray-900/60 border border-gray-800">
-                        <span class="text-sm text-gray-400">Pitch Movement</span>
-                        <span class="text-sm font-bold text-white"><span id="sideVert">V: --"</span> | <span id="sideHorz">H: --"</span></span>
+
+                    <!-- Pitch Classification -->
+                    <div class="p-3 rounded-xl bg-slate-900/60 border border-white/5">
+                        <span class="text-[10px] uppercase tracking-wider font-semibold text-slate-400 block mb-1">Pitch Type</span>
+                        <div class="text-xs font-bold text-white truncate" id="sidePitchType">
+                            Fastball
+                        </div>
                     </div>
-                    <div class="flex items-center justify-between p-3 rounded-xl bg-gray-900/60 border border-gray-800">
-                        <span class="text-sm text-gray-400">Pitch Classification</span>
-                        <span id="sidePitchType" class="text-sm font-bold text-gray-400">Waiting for pitch</span>
+
+                    <!-- Vertical Break -->
+                    <div class="p-3 rounded-xl bg-slate-900/60 border border-white/5">
+                        <span class="text-[10px] uppercase tracking-wider font-semibold text-slate-400 block mb-1">Vertical Break</span>
+                        <div class="text-base font-bold text-white tabular-nums">
+                            <span id="vertBreakVal">--</span> <span class="text-xs text-slate-400 font-normal">in</span>
+                        </div>
+                    </div>
+
+                    <!-- Horizontal Break -->
+                    <div class="p-3 rounded-xl bg-slate-900/60 border border-white/5">
+                        <span class="text-[10px] uppercase tracking-wider font-semibold text-slate-400 block mb-1">Horizontal Break</span>
+                        <div class="text-base font-bold text-white tabular-nums">
+                            <span id="horzBreakVal">--</span> <span class="text-xs text-slate-400 font-normal">in</span>
+                        </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Pitch Distance & Calibration Settings -->
-            <div class="bg-pitchcard border border-gray-800 rounded-2xl p-5 shadow-xl">
-                <h3 class="font-bold text-sm text-gray-300 uppercase tracking-wider mb-4 flex items-center gap-2">
-                    <i data-lucide="sliders" class="w-4 h-4 text-pitchgold"></i>
-                    <span>Distance & Strike Zone</span>
-                </h3>
+            <!-- Card 2: Strike Zone & Plate Alignment Inspector -->
+            <div class="glass-panel card-outer">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="flex items-center gap-2">
+                        <i data-lucide="crosshair" class="w-4 h-4 text-pitchcyan"></i>
+                        <h3 class="text-xs font-bold text-slate-300 uppercase tracking-wider">Strike Zone Inspector</h3>
+                    </div>
+                    <button id="calibrateZoneSidebarBtn" class="text-[11px] font-bold text-pitchcyan hover:text-white transition flex items-center gap-1">
+                        <i data-lucide="edit-3" class="w-3 h-3"></i> Calibrate
+                    </button>
+                </div>
 
-                <div class="space-y-4">
+                <div class="space-y-3">
+                    <!-- Perspective Presets Segmented Control -->
                     <div>
-                        <label class="text-xs text-gray-400 font-medium block mb-1">Mound-to-Plate Distance</label>
-                        <select id="distancePresetSelect" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-pitchgold">
+                        <label class="text-[11px] font-semibold text-slate-400 block mb-1.5">Camera Angle Preset</label>
+                        <div class="grid grid-cols-3 gap-1 bg-slate-900/90 p-1 rounded-xl border border-white/10 text-center">
+                            <button type="button" data-perspective="behind_pitcher" class="perspective-btn px-2 py-1.5 rounded-lg text-xs font-bold bg-pitchcyan text-black transition">Pitcher</button>
+                            <button type="button" data-perspective="broadcast" class="perspective-btn px-2 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:text-white transition">Broadcast</button>
+                            <button type="button" data-perspective="behind_plate" class="perspective-btn px-2 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:text-white transition">Plate</button>
+                        </div>
+                    </div>
+
+                    <!-- Live Strike Zone Coordinates & Live ABS Status -->
+                    <div class="p-3 rounded-xl bg-slate-900/80 border border-white/10 space-y-2">
+                        <div class="flex items-center justify-between text-xs">
+                            <span class="text-slate-400 font-medium">Zone Dimensions</span>
+                            <span class="font-bold text-white tabular-nums"><span id="zoneWVal">120</span> × <span id="zoneHVal">130</span> px</span>
+                        </div>
+                        <div class="flex items-center justify-between text-xs">
+                            <span class="text-slate-400 font-medium">Center Position</span>
+                            <span class="font-bold text-white tabular-nums">(<span id="zoneXVal">50%</span>, <span id="zoneYVal">50%</span>)</span>
+                        </div>
+                        <div class="flex items-center justify-between text-xs pt-1 border-t border-white/5">
+                            <span class="text-slate-400 font-medium">Real-Time ABS Call</span>
+                            <span id="sideZoneCallStatus" class="font-black text-emerald-400 uppercase text-[11px]">STRIKE</span>
+                        </div>
+                    </div>
+
+                    <!-- Mound Distance Selector -->
+                    <div>
+                        <label class="text-[11px] font-semibold text-slate-400 block mb-1">Mound-to-Plate Distance</label>
+                        <select id="distancePresetSelect" class="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-pitchcyan transition">
                             <option value="60.5" selected>⚾ MLB Regulation (60.5 ft / 18.44 m)</option>
                             <option value="46.0">⚾ Little League / Youth (46.0 ft / 14.02 m)</option>
                             <option value="43.0">🥎 Softball (43.0 ft / 13.11 m)</option>
@@ -275,99 +347,125 @@
                     </div>
 
                     <div id="customDistanceRow" class="hidden">
-                        <label class="text-xs text-gray-400 font-medium block mb-1">Custom Distance (Feet)</label>
-                        <input type="number" id="customDistanceInput" value="60.5" step="0.5" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-pitchgold">
+                        <input type="number" id="customDistanceInput" value="60.5" step="0.5" placeholder="Distance in feet" class="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-pitchcyan transition">
                     </div>
 
-                    <!-- Trajectory Graphic Style Selector -->
+                    <!-- Apply & Fast Re-Render Button -->
+                    <button id="applyZoneChangesBtn" class="w-full py-2.5 rounded-xl bg-pitchcyan hover:bg-cyan-300 text-black text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-lg shadow-pitchcyan/10 btn-tactile">
+                        <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+                        <span>Apply & Re-Render (~1s)</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Card 3: Visuals, Ball Physics & Preferences -->
+            <div class="glass-panel card-outer">
+                <div class="flex items-center gap-2 mb-3">
+                    <i data-lucide="palette" class="w-4 h-4 text-pitchcyan"></i>
+                    <h3 class="text-xs font-bold text-slate-300 uppercase tracking-wider">Visuals & Preferences</h3>
+                </div>
+
+                <div class="space-y-3">
+                    <!-- Streamline Visual Theme Chips -->
                     <div>
-                        <label class="text-xs text-gray-400 font-medium block mb-1">Trajectory Graphic Style</label>
-                        <select id="graphicStyleSelect" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-pitchgold">
-                            <option value="statcast_cyan" selected>⚡ Statcast 3D Cyan (MLB Broadcast)</option>
-                            <option value="neon_gold">✨ PitchLab Neon Gold</option>
-                            <option value="electric_violet">🟣 Electric Violet</option>
-                            <option value="laser_emerald">🟢 Laser Emerald</option>
-                        </select>
+                        <label class="text-[11px] font-semibold text-slate-400 block mb-1.5">3D Streamline Color Theme</label>
+                        <div class="grid grid-cols-2 gap-2">
+                            <button type="button" data-theme="statcast_cyan" class="theme-chip p-2 rounded-xl bg-slate-900 border border-pitchcyan/60 flex items-center gap-2 text-xs font-bold text-white transition text-left">
+                                <span class="w-3 h-3 rounded-full bg-pitchcyan shadow-sm shadow-pitchcyan/50"></span>
+                                <span>Statcast Cyan</span>
+                            </button>
+                            <button type="button" data-theme="neon_gold" class="theme-chip p-2 rounded-xl bg-slate-900 border border-white/10 flex items-center gap-2 text-xs font-semibold text-slate-400 hover:text-white transition text-left">
+                                <span class="w-3 h-3 rounded-full bg-pitchgold shadow-sm shadow-pitchgold/50"></span>
+                                <span>Neon Gold</span>
+                            </button>
+                            <button type="button" data-theme="electric_violet" class="theme-chip p-2 rounded-xl bg-slate-900 border border-white/10 flex items-center gap-2 text-xs font-semibold text-slate-400 hover:text-white transition text-left">
+                                <span class="w-3 h-3 rounded-full bg-pitchviolet shadow-sm shadow-pitchviolet/50"></span>
+                                <span>Violet Laser</span>
+                            </button>
+                            <button type="button" data-theme="laser_emerald" class="theme-chip p-2 rounded-xl bg-slate-900 border border-white/10 flex items-center gap-2 text-xs font-semibold text-slate-400 hover:text-white transition text-left">
+                                <span class="w-3 h-3 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400/50"></span>
+                                <span>Emerald</span>
+                            </button>
+                        </div>
                     </div>
 
                     <!-- Ball Type Selector -->
                     <div>
-                        <label class="text-xs text-gray-400 font-medium block mb-1">Ball Type</label>
-                        <select id="ballTypeSelect" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-pitchgold">
+                        <label class="text-[11px] font-semibold text-slate-400 block mb-1">Ball Type</label>
+                        <select id="ballTypeSelect" class="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-pitchcyan transition">
                             <option value="auto" selected>⚡ Auto Detect</option>
-                            <option value="baseball">⚾ Baseball (White Leather)</option>
-                            <option value="tennis_cricket">🎾 Tennis / Cricket Ball (Yellow / Neon)</option>
+                            <option value="baseball">⚾ Regulation Baseball (White Leather)</option>
+                            <option value="tennis_cricket">🎾 Tennis / Cricket Ball (Neon Green/Yellow)</option>
                         </select>
                     </div>
 
-                    <!-- Camera Perspective Selector -->
-                    <div>
-                        <label class="text-xs text-gray-400 font-medium block mb-1">Camera Perspective</label>
-                        <select id="perspectiveSelect" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-pitchgold">
-                            <option value="auto" selected>⚡ Auto Detect</option>
-                            <option value="behind_pitcher">🎯 Behind Bowler / Pitcher POV</option>
-                            <option value="broadcast">📺 MLB Broadcast Center-Field</option>
-                            <option value="behind_plate">📱 Behind Home Plate</option>
-                        </select>
-                    </div>
-
-                    <!-- Fast Mode: Trim to Pitch Action -->
-                    <div class="flex items-center justify-between p-2.5 rounded-lg bg-gray-900/80 border border-gray-800">
-                        <div>
-                            <span class="text-xs font-semibold text-gray-200 block">Trim to Pitch Action</span>
-                            <span class="text-[10px] text-gray-400 block">Fast export (cuts idle walking before throw)</span>
-                        </div>
-                        <input type="checkbox" id="trimPitchCheckbox" checked class="w-4 h-4 accent-amber-500 rounded cursor-pointer">
-                    </div>
-
-                    <!-- Direct Drag & Drop Strike Zone Positioning -->
-                    <div class="pt-3 border-t border-gray-800">
-                        <div class="flex items-center justify-between mb-2">
-                            <label class="text-xs text-gray-300 font-bold uppercase tracking-wider">Strike Zone Positioning</label>
-                            <span class="text-[11px] text-pitchgold flex items-center gap-1 font-medium">
-                                <i data-lucide="hand" class="w-3 h-3"></i> Direct Drag & Drop
-                            </span>
-                        </div>
-                        <p class="text-[11px] text-gray-400 mb-3 leading-relaxed">
-                            Click & drag the box on the video to position it over home plate or stumps. Drag corners to resize.
-                        </p>
-                        
-                        <div class="flex gap-2 mb-2">
-                            <button type="button" id="toggleZoneEditorBtn" class="flex-1 py-2 px-3 rounded-lg bg-pitchgold hover:bg-pitchgold/90 text-black font-bold text-xs flex items-center justify-center gap-1.5 transition shadow-md shadow-pitchgold/20">
-                                <i data-lucide="crosshair" class="w-4 h-4"></i>
-                                <span id="zoneEditorToggleText">Position On Screen</span>
-                            </button>
-                            <button type="button" id="applyZoneBtn" class="py-2 px-4 rounded-lg bg-gray-800 hover:bg-gray-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 border border-gray-700 transition">
-                                <i data-lucide="check" class="w-4 h-4 text-pitchgreen"></i> Apply
-                            </button>
+                    <!-- Clean Video & Fast Trimming Toggles -->
+                    <div class="pt-2 border-t border-white/5 space-y-2">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <span class="text-xs font-semibold text-slate-200 block">Clean Video (No Black Boxes)</span>
+                                <span class="text-[10px] text-slate-400 block">100% visible field (telemetry in Web UI)</span>
+                            </div>
+                            <input type="checkbox" id="cleanVideoCheckbox" checked class="w-4 h-4 accent-cyan-400 rounded cursor-pointer">
                         </div>
 
-                        <!-- Quick Perspective Presets -->
-                        <div class="flex gap-1.5 pt-1">
-                            <button type="button" id="presetBroadcastBtn" class="flex-1 py-1 px-2 rounded bg-gray-900 hover:bg-gray-800 text-[11px] text-gray-400 hover:text-gray-200 border border-gray-800 transition">Center-Field</button>
-                            <button type="button" id="presetBowlerBtn" class="flex-1 py-1 px-2 rounded bg-gray-900 hover:bg-gray-800 text-[11px] text-gray-400 hover:text-gray-200 border border-gray-800 transition">Bowler POV</button>
-                            <button type="button" id="presetMobileBtn" class="flex-1 py-1 px-2 rounded bg-gray-900 hover:bg-gray-800 text-[11px] text-gray-400 hover:text-gray-200 border border-gray-800 transition">Behind-Plate</button>
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <span class="text-xs font-semibold text-slate-200 block">Trim to Pitch Action</span>
+                                <span class="text-[10px] text-slate-400 block">Fast export (cuts idle walking)</span>
+                            </div>
+                            <input type="checkbox" id="trimPitchCheckbox" checked class="w-4 h-4 accent-cyan-400 rounded cursor-pointer">
                         </div>
                     </div>
                 </div>
-            </div>
-
-            <!-- Drag & Drop Upload Quick Box -->
-            <div id="dropZone" class="border-2 border-dashed border-gray-800 hover:border-pitchgold/60 rounded-2xl p-6 flex flex-col items-center justify-center text-center transition cursor-pointer bg-gray-950/40">
-                <i data-lucide="film" class="w-8 h-8 text-pitchgold/80 mb-2"></i>
-                <p class="text-sm font-semibold text-gray-300">Drop your pitch video here</p>
-                <p class="text-xs text-gray-500 mt-1">Supports MP4, MOV, AVI up to 120 FPS</p>
             </div>
 
         </div>
 
     </main>
 
-    <!-- Footer -->
-    <footer class="border-t border-gray-900 py-4 text-center text-xs text-gray-600">
-        PitchLab AI • Powered by BaseballCV, PyTorch & OpenCV Kinematics
-    </footer>
+    <!-- Keyboard Shortcuts Modal -->
+    <div id="helpModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="glass-panel card-outer max-w-md w-full border border-white/10 p-6">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="font-bold text-base text-white flex items-center gap-2">
+                    <i data-lucide="keyboard" class="w-5 h-5 text-pitchcyan"></i>
+                    <span>Keyboard Shortcuts</span>
+                </h3>
+                <button id="closeHelpModalBtn" class="text-slate-400 hover:text-white transition">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            <div class="space-y-3 text-xs">
+                <div class="flex items-center justify-between py-1.5 border-b border-white/5">
+                    <span class="text-slate-300">Play / Pause</span>
+                    <kbd class="px-2 py-0.5 rounded bg-slate-800 border border-white/10 font-mono text-pitchcyan">Space</kbd>
+                </div>
+                <div class="flex items-center justify-between py-1.5 border-b border-white/5">
+                    <span class="text-slate-300">Step -1 Frame</span>
+                    <kbd class="px-2 py-0.5 rounded bg-slate-800 border border-white/10 font-mono text-pitchcyan">←</kbd>
+                </div>
+                <div class="flex items-center justify-between py-1.5 border-b border-white/5">
+                    <span class="text-slate-300">Step +1 Frame</span>
+                    <kbd class="px-2 py-0.5 rounded bg-slate-800 border border-white/10 font-mono text-pitchcyan">→</kbd>
+                </div>
+                <div class="flex items-center justify-between py-1.5 border-b border-white/5">
+                    <span class="text-slate-300">Toggle Strike Zone Calibration</span>
+                    <kbd class="px-2 py-0.5 rounded bg-slate-800 border border-white/10 font-mono text-pitchcyan">Z</kbd>
+                </div>
+                <div class="flex items-center justify-between py-1.5">
+                    <span class="text-slate-300">Cancel Calibration</span>
+                    <kbd class="px-2 py-0.5 rounded bg-slate-800 border border-white/10 font-mono text-pitchcyan">Esc</kbd>
+                </div>
+            </div>
+        </div>
+    </div>
 
+    <!-- Application Script -->
     <script src="/static/app.js"></script>
+    <script>
+        // Initialize Lucide Icons
+        lucide.createIcons();
+    </script>
 </body>
 </html>

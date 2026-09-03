@@ -352,6 +352,62 @@ class PitchRenderer:
 
         return frame
 
+    def draw_minimal_badge(
+        self,
+        frame: np.ndarray,
+        velocity_mph: float,
+        call_result: Optional[PitchCallResult] = None,
+        pitch_tag: str = "Fastball",
+    ) -> np.ndarray:
+        """
+        Draws an ultra-sleek, non-intrusive broadcast badge in the top-right corner.
+        Takes up only 32px height, never obscuring the pitcher, home plate, or ball flight.
+        """
+        h, w = frame.shape[:2]
+        badge_text = f"{velocity_mph:.1f} MPH  |  {pitch_tag.upper()}"
+        call_text = call_result.call if call_result else ""
+
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        font_scale = 0.52
+        thickness = 1
+
+        (text_w, text_h), _ = cv2.getTextSize(badge_text, font, font_scale, thickness)
+        call_w = 0
+        if call_text:
+            (call_w, _), _ = cv2.getTextSize(call_text, font, 0.50, 2)
+            call_w += 16
+
+        pad_x = 14
+        badge_w = text_w + call_w + (pad_x * 2)
+        badge_h = 32
+        x1 = w - badge_w - 20
+        y1 = 20
+        x2 = x1 + badge_w
+        y2 = y1 + badge_h
+
+        # Translucent background pill
+        overlay = frame.copy()
+        cv2.rectangle(overlay, (x1, y1), (x2, y2), (15, 20, 28), -1)
+        cv2.rectangle(overlay, (x1, y1), (x2, y2), (55, 65, 81), 1)
+        frame = cv2.addWeighted(overlay, 0.85, frame, 0.15, 0)
+
+        # Metric text
+        cv2.putText(frame, badge_text, (x1 + pad_x, y1 + 21), font, font_scale, (255, 255, 255), thickness, cv2.LINE_AA)
+
+        # Call tag
+        if call_text:
+            is_strike = call_result.is_strike if call_result else False
+            c_color = (0, 230, 118) if is_strike else (60, 60, 255)
+            cx1 = x2 - call_w - 6
+            cx2 = x2 - 8
+            cy1 = y1 + 5
+            cy2 = y2 - 5
+            cv2.rectangle(frame, (cx1, cy1), (cx2, cy2), (24, 30, 42), -1)
+            cv2.rectangle(frame, (cx1, cy1), (cx2, cy2), c_color, 1)
+            cv2.putText(frame, call_text, (cx1 + 6, cy2 - 5), font, 0.44, c_color, 1, cv2.LINE_AA)
+
+        return frame
+
     def render_complete_video(
         self,
         input_video_path: str,
@@ -368,10 +424,15 @@ class PitchRenderer:
         show_strike_zone: bool = True,
         graphic_style: str = "statcast_cyan",
         trim_to_pitch: bool = True,
+        hud_style: str = "none",
     ) -> None:
         """
         Renders the complete Pitch Lab video with Statcast 3D trajectory streamline,
-        HUD card, and broadcast strike zone box.
+        clean unobscured field, and broadcast strike zone box.
+        hud_style options:
+          - 'none': Clean video with zero field obstruction (recommended, telemetry in web UI)
+          - 'minimal_badge': Tiny 32px broadcast badge in top corner
+          - 'classic_card': Large bottom card
         """
         if graphic_style:
             self.set_graphic_style(graphic_style)
@@ -406,21 +467,30 @@ class PitchRenderer:
             if show_strike_zone and strike_zone:
                 frame = self.draw_strike_zone(frame, strike_zone, call_result)
 
-            # 2. Glowing yellow trajectory ribbon
+            # 2. Glowing trajectory ribbon
             frame = self.draw_glowing_ribbon(frame, trajectory_points, frame_idx)
 
-            # 3. Bottom HUD Card
-            if trajectory_points and frame_idx >= trajectory_points[0].frame_idx:
-                frame = self.draw_hud_card(
-                    frame=frame,
-                    pitch_number=pitch_number,
-                    velocity_mph=velocity_mph,
-                    vert_break_in=vert_break_in,
-                    horz_break_in=horz_break_in,
-                    call_result=call_result,
-                    pitch_tag=pitch_tag,
-                    flight_time_ms=flight_time_ms,
-                )
+            # 3. Optional HUD Overlay (Default 'none' leaves field 100% unobstructed)
+            if hud_style == "minimal_badge":
+                if trajectory_points and frame_idx >= trajectory_points[0].frame_idx:
+                    frame = self.draw_minimal_badge(
+                        frame=frame,
+                        velocity_mph=velocity_mph,
+                        call_result=call_result,
+                        pitch_tag=pitch_tag,
+                    )
+            elif hud_style == "classic_card":
+                if trajectory_points and frame_idx >= trajectory_points[0].frame_idx:
+                    frame = self.draw_hud_card(
+                        frame=frame,
+                        pitch_number=pitch_number,
+                        velocity_mph=velocity_mph,
+                        vert_break_in=vert_break_in,
+                        horz_break_in=horz_break_in,
+                        call_result=call_result,
+                        pitch_tag=pitch_tag,
+                        flight_time_ms=flight_time_ms,
+                    )
 
             out.write(frame)
             frame_idx += 1

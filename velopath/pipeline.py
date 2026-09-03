@@ -23,6 +23,7 @@ def process_pitch_video(
     ball_type: str = "auto",
     perspective: str = "auto",
     trim_to_pitch: bool = True,
+    hud_style: str = "none",
 ) -> Dict[str, Any]:
     """
     Complete end-to-end Pitch Lab analysis:
@@ -133,6 +134,7 @@ def process_pitch_video(
         show_strike_zone=True,
         graphic_style=graphic_style,
         trim_to_pitch=trim_to_pitch,
+        hud_style=hud_style,
     )
 
     return {
@@ -233,6 +235,7 @@ def rerender_pitch(
     ball_type: str = "auto",
     perspective: str = "auto",
     trim_to_pitch: bool = True,
+    hud_style: str = "none",
 ) -> dict:
     """
     Fast re-render using existing tracked trajectory and updated strike zone or graphic theme.
@@ -297,6 +300,7 @@ def rerender_pitch(
         show_strike_zone=True,
         graphic_style=graphic_style,
         trim_to_pitch=trim_to_pitch,
+        hud_style=hud_style,
     )
 
     return {

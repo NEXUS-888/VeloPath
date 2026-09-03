@@ -1,30 +1,212 @@
-/* PitchLab AI Custom Styling */
+﻿/* ==========================================================================
+   VeloPath AI - Modern Sports Analytics Studio Styling
+   ========================================================================== */
 
-@keyframes pulse-gold {
-    0%, 100% {
-        box-shadow: 0 0 15px rgba(255, 184, 0, 0.25);
-    }
-    50% {
-        box-shadow: 0 0 30px rgba(255, 184, 0, 0.45);
-    }
+:root {
+    --bg-main: #0B0E14;
+    --bg-surface: #121620;
+    --bg-card: rgba(18, 22, 32, 0.85);
+    --border-subtle: rgba(255, 255, 255, 0.08);
+    --border-focus: rgba(0, 229, 255, 0.5);
+    --accent-cyan: #00E5FF;
+    --accent-gold: #FFB800;
+    --accent-green: #00E676;
+    --accent-red: #FF334B;
+    --accent-violet: #D946EF;
+    --text-primary: #F8FAFC;
+    --text-secondary: #94A3B8;
+    --text-muted: #64748B;
 }
 
-.glow-gold {
-    animation: pulse-gold 3s infinite ease-in-out;
+html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
 }
 
-/* Custom scrollbars */
+body {
+    background-color: var(--bg-main);
+    color: var(--text-primary);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+}
+
+/* Tabular Numerals for Jitter-Free Telemetry */
+.tabular-nums,
+#heroVelocityVal,
+#heroVelocityKmh,
+#flightTimeVal,
+#vertBreakVal,
+#horzBreakVal,
+#zoneXVal,
+#zoneYVal,
+#zoneWVal,
+#zoneHVal {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum";
+}
+
+/* Glassmorphic Surfaces */
+.glass-panel {
+    background: var(--bg-card);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid var(--border-subtle);
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+}
+
+.glass-pill {
+    background: rgba(15, 20, 30, 0.75);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+/* Concentric Radius (outer = inner + padding) */
+.card-outer {
+    border-radius: 20px;
+    padding: 16px;
+}
+.card-inner {
+    border-radius: 12px;
+}
+
+/* Tactile Interactive Buttons */
+button, .btn-tactile {
+    transition-property: transform, background-color, border-color, box-shadow, opacity;
+    transition-duration: 140ms;
+    transition-timing-function: ease-out;
+}
+
+button:active, .btn-tactile:active {
+    transform: scale(0.96);
+}
+
+/* Custom Video Container & Viewport */
+.video-viewport-wrapper {
+    position: relative;
+    background: #000000;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+    border-radius: 20px;
+    overflow: hidden;
+}
+
+/* Elegant Interactive Strike Zone Box */
+.zone-canvas-box {
+    position: absolute;
+    border: 2px solid var(--accent-cyan);
+    background: rgba(0, 229, 255, 0.12);
+    box-shadow: 0 0 25px rgba(0, 229, 255, 0.25), inset 0 0 15px rgba(0, 229, 255, 0.1);
+    cursor: grab;
+    z-index: 25;
+    user-select: none;
+    transition-property: border-color, box-shadow;
+    transition-duration: 150ms;
+}
+
+.zone-canvas-box:active {
+    cursor: grabbing;
+}
+
+.zone-canvas-box.is-strike {
+    border-color: var(--accent-green);
+    background: rgba(0, 230, 118, 0.14);
+    box-shadow: 0 0 25px rgba(0, 230, 118, 0.3);
+}
+
+.zone-canvas-box.is-ball {
+    border-color: var(--accent-red);
+    background: rgba(255, 51, 75, 0.14);
+    box-shadow: 0 0 25px rgba(255, 51, 75, 0.3);
+}
+
+/* Strike Zone Resize Corner Anchors */
+.zone-anchor {
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    background: #FFFFFF;
+    border: 2px solid var(--accent-cyan);
+    border-radius: 50%;
+    box-shadow: 0 0 8px rgba(0, 0, 0, 0.8);
+    transition-property: transform, background-color;
+    transition-duration: 120ms;
+}
+
+.zone-anchor:hover {
+    transform: scale(1.35);
+    background: var(--accent-cyan);
+}
+
+#anchorNW { top: -7px; left: -7px; cursor: nwse-resize; }
+#anchorNE { top: -7px; right: -7px; cursor: nesw-resize; }
+#anchorSW { bottom: -7px; left: -7px; cursor: nesw-resize; }
+#anchorSE { bottom: -7px; right: -7px; cursor: nwse-resize; }
+
+/* Dynamic Glow Accents */
+.glow-cyan {
+    box-shadow: 0 0 20px rgba(0, 229, 255, 0.35);
+}
+
+.glow-emerald {
+    box-shadow: 0 0 20px rgba(0, 230, 118, 0.35);
+}
+
+.glow-red {
+    box-shadow: 0 0 20px rgba(255, 51, 75, 0.35);
+}
+
+/* Custom Subtle Scrollbars */
 ::-webkit-scrollbar {
     width: 6px;
     height: 6px;
 }
 ::-webkit-scrollbar-track {
-    background: #0C0D14;
+    background: var(--bg-main);
 }
 ::-webkit-scrollbar-thumb {
-    background: #252836;
+    background: rgba(255, 255, 255, 0.15);
     border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
-    background: #FFB800;
+    background: var(--accent-cyan);
+}
+
+/* Video Range Input Styling */
+input[type=range] {
+    -webkit-appearance: none;
+    background: transparent;
+}
+input[type=range]:focus {
+    outline: none;
+}
+input[type=range]::-webkit-slider-runnable-track {
+    height: 4px;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 2px;
+}
+input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    height: 14px;
+    width: 14px;
+    border-radius: 50%;
+    background: var(--accent-cyan);
+    cursor: pointer;
+    margin-top: -5px;
+    box-shadow: 0 0 10px rgba(0, 229, 255, 0.8);
+    transition: transform 120ms ease;
+}
+input[type=range]::-webkit-slider-thumb:hover {
+    transform: scale(1.3);
+}
+
+/* Pulse Animation for Status Badges */
+@keyframes pulse-dot {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.4; transform: scale(0.85); }
+}
+
+.animate-pulse-dot {
+    animation: pulse-dot 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
