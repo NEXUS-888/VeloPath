@@ -415,6 +415,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const style = graphicStyleSelect.value;
         const ballType = ballTypeSelect?.value || 'auto';
         const perspective = perspectiveSelect?.value || 'auto';
+        const trimPitch = document.getElementById('trimPitchCheckbox')?.checked ?? true;
 
         const payload = {
             video_id: currentPitchData.video_id || 'sample',
@@ -429,7 +430,8 @@ document.addEventListener('DOMContentLoaded', () => {
             graphic_style: style,
             ball_type: ballType,
             perspective: perspective,
-            pitch_number: currentPitchData.pitch_number || 1
+            pitch_number: currentPitchData.pitch_number || 1,
+            trim_to_pitch: trimPitch,
         };
 
         try {
@@ -469,6 +471,8 @@ document.addEventListener('DOMContentLoaded', () => {
         formData.append('graphic_style', graphicStyleSelect.value);
         formData.append('ball_type', ballTypeSelect?.value || 'auto');
         formData.append('perspective', perspectiveSelect?.value || 'auto');
+        const trimPitch = document.getElementById('trimPitchCheckbox')?.checked ?? true;
+        formData.append('trim_to_pitch', trimPitch);
 
         try {
             const response = await fetch('/api/process', {

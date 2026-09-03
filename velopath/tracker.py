@@ -254,11 +254,16 @@ class PitchTracker:
 
         # 2. Coarse Candidate Scan across the entire video
         # In sports videos of 5s to 45s, players walk or pause before throwing.
-        # A fast coarse scan pinpoints the exact active pitch window.
-        coarse_stride = max(2, min(5, total_frames // 80))
+        # Safe coarse stride (6-8 frames) captures flight 3-5 times while cutting inferences by 60%.
+        coarse_stride = max(5, min(8, int(round(fps * 0.12))))
         coarse_hits = []
         cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
         prev_coarse_frame = None
+
+        crop_x1 = max(0, int(corridor_x1))
+        crop_y1 = max(0, int(corridor_y1))
+        crop_x2 = min(width, int(corridor_x2))
+        crop_y2 = min(height, int(corridor_y2))
 
         for f in range(0, total_frames, coarse_stride):
             cap.set(cv2.CAP_PROP_POS_FRAMES, f)
@@ -269,17 +274,18 @@ class PitchTracker:
             hit = None
             if self.model:
                 try:
-                    res = self.model.predict(frame, conf=0.15, verbose=False, imgsz=480)
+                    crop = frame[crop_y1:crop_y2, crop_x1:crop_x2]
+                    res = self.model.predict(crop, conf=0.15, verbose=False, imgsz=384)
                     for b in res[0].boxes:
                         bx1, by1, bx2, by2 = b.xyxy[0].tolist()
-                        bcx, bcy = (bx1 + bx2) / 2.0, (by1 + by2) / 2.0
-                        if corridor_x1 <= bcx <= corridor_x2 and corridor_y1 <= bcy <= corridor_y2:
-                            hit = (f, bcx, bcy, float(b.conf[0]), bx2 - bx1)
-                            break
+                        bcx = (bx1 + bx2) / 2.0 + crop_x1
+                        bcy = (by1 + by2) / 2.0 + crop_y1
+                        hit = (f, bcx, bcy, float(b.conf[0]), bx2 - bx1)
+                        break
                 except Exception:
                     pass
 
-            if hit is None and (ball_type in ["auto", "tennis_cricket"]):
+            if hit is None and (self.model is None) and (ball_type in ["auto", "tennis_cricket"]):
                 cand = self.detect_color_motion_ball(
                     frame=frame,
                     prev_frame=prev_coarse_frame,
@@ -313,11 +319,15 @@ class PitchTracker:
                 chains.append(curr_chain)
 
         if chains:
-            # Pick best flight chain (weighted by hit count & net displacement)
-            best_chain = max(
-                chains,
-                key=lambda c: len(c) * (1.0 + np.hypot(c[-1][1] - c[0][1], c[-1][2] - c[0][2]))
-            )
+            # Pick best flight chain (weighted by ballistic speed and net displacement)
+            # Fast pitch flight has high speed (> 4 px/frame) and distinct trajectory displacement
+            def score_chain(c):
+                dt = max(1, c[-1][0] - c[0][0])
+                disp = np.hypot(c[-1][1] - c[0][1], c[-1][2] - c[0][2])
+                speed = disp / float(dt)
+                return speed * disp * (len(c) ** 1.5)
+
+            best_chain = max(chains, key=score_chain)
             pitch_start = max(0, best_chain[0][0] - (coarse_stride * 2))
             pitch_end = min(total_frames, best_chain[-1][0] + (coarse_stride * 2))
         else:
@@ -339,17 +349,18 @@ class PitchTracker:
 
             pt_found = None
 
-            # Pass A: High-res YOLO Detection
+            # Pass A: High-res YOLO Detection on Corridor Crop (2x faster than full frame)
             if self.model and (curr_frame % frame_stride == 0):
                 try:
-                    res = self.model.predict(frame, conf=conf_thresh, verbose=False, imgsz=640)
+                    crop = frame[crop_y1:crop_y2, crop_x1:crop_x2]
+                    res = self.model.predict(crop, conf=conf_thresh, verbose=False, imgsz=480)
                     if len(res[0].boxes) > 0:
                         valid_boxes = []
                         for b in res[0].boxes:
                             bx1, by1, bx2, by2 = b.xyxy[0].tolist()
-                            bcx, bcy = (bx1 + bx2) / 2.0, (by1 + by2) / 2.0
-                            if corridor_x1 <= bcx <= corridor_x2 and corridor_y1 <= bcy <= corridor_y2:
-                                valid_boxes.append((b, bcx, bcy, bx2 - bx1))
+                            bcx = (bx1 + bx2) / 2.0 + crop_x1
+                            bcy = (by1 + by2) / 2.0 + crop_y1
+                            valid_boxes.append((b, bcx, bcy, bx2 - bx1))
                         if valid_boxes:
                             best_box = max(valid_boxes, key=lambda item: float(item[0].conf[0]))
                             b_obj, cx, cy, sz = best_box

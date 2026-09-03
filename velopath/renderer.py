@@ -367,6 +367,7 @@ class PitchRenderer:
         flight_time_ms: Optional[float] = None,
         show_strike_zone: bool = True,
         graphic_style: str = "statcast_cyan",
+        trim_to_pitch: bool = True,
     ) -> None:
         """
         Renders the complete Pitch Lab video with Statcast 3D trajectory streamline,
@@ -381,12 +382,22 @@ class PitchRenderer:
         fps = cap.get(cv2.CAP_PROP_FPS) or 60.0
         width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        total_in_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+
+        # Action-window trimming: if enabled, render active pitch + 1s lead-in/follow-through
+        if trim_to_pitch and trajectory_points and len(trajectory_points) >= 2:
+            start_frame_export = max(0, trajectory_points[0].frame_idx - int(fps * 1.0))
+            end_frame_export = min(total_in_frames, trajectory_points[-1].frame_idx + int(fps * 1.5))
+        else:
+            start_frame_export = 0
+            end_frame_export = total_in_frames
 
         fourcc = cv2.VideoWriter_fourcc(*"mp4v")
         out = cv2.VideoWriter(output_video_path, fourcc, fps, (width, height))
 
-        frame_idx = 0
-        while True:
+        cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame_export)
+        frame_idx = start_frame_export
+        while frame_idx < end_frame_export:
             ret, frame = cap.read()
             if not ret:
                 break
