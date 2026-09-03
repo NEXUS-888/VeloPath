@@ -150,9 +150,9 @@ class PitchTracker:
 
         hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
 
-        # Optic-yellow / neon tennis ball mask in outdoor daylight
-        # H: 22-78 covers neon green-yellow tennis balls and outdoor softballs
-        mask_yellow = cv2.inRange(hsv, (22, 40, 55), (78, 255, 255))
+        # Optic-yellow / neon tennis / tape ball mask in outdoor daylight
+        # H: 12-82 covers neon green-yellow tennis balls, tape balls, and outdoor softballs
+        mask_yellow = cv2.inRange(hsv, (12, 35, 45), (82, 255, 255))
         # High-brightness white/light ball mask
         mask_white = cv2.inRange(hsv, (0, 0, 180), (180, 50, 255))
 
@@ -245,6 +245,7 @@ class PitchTracker:
             resolved_perspective = perspective
 
         # Perspective-aware spatial corridor (covers release to plate)
+        is_portrait = height > width
         if resolved_perspective == "broadcast":
             corridor_x1, corridor_x2 = width * 0.18, width * 0.82
             corridor_y1, corridor_y2 = height * 0.12, height * 0.80
@@ -253,16 +254,20 @@ class PitchTracker:
             corridor_y1, corridor_y2 = height * 0.10, height * 0.85
         elif resolved_perspective == "behind_pitcher":
             # Behind bowler/pitcher looking towards net / plate
+            # In portrait videos, exclude bottom 35% where pitcher's shoes/legs move
             corridor_x1, corridor_x2 = width * 0.15, width * 0.85
-            corridor_y1, corridor_y2 = height * 0.12, height * 0.85
+            corridor_y1 = height * 0.12
+            corridor_y2 = height * 0.65 if is_portrait else height * 0.75
         else:  # behind_plate
             corridor_x1, corridor_x2 = width * 0.12, width * 0.88
             corridor_y1, corridor_y2 = height * 0.12, height * 0.88
 
         # 2. Coarse Candidate Scan across the entire video
-        # In sports videos of 5s to 45s, players walk or pause before throwing.
-        # Safe coarse stride (6-8 frames) captures flight 3-5 times while cutting inferences by 60%.
-        coarse_stride = max(5, min(8, int(round(fps * 0.12))))
+        # At 30 FPS, flight lasts only 6-10 frames (use stride 2-3). At 60 FPS, use stride 4-6.
+        if fps <= 35:
+            coarse_stride = max(2, min(3, int(round(fps * 0.08))))
+        else:
+            coarse_stride = max(4, min(7, int(round(fps * 0.10))))
         coarse_hits = []
         cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
         prev_coarse_frame = None
@@ -332,6 +337,11 @@ class PitchTracker:
                 dt = max(1, c[-1][0] - c[0][0])
                 disp = np.hypot(c[-1][1] - c[0][1], c[-1][2] - c[0][2])
                 speed = disp / float(dt)
+                # In behind_pitcher view, ball moves in depth away from camera (small 2D screen disp)
+                # Chain length (number of continuous detections) and confidence are the primary signals
+                if resolved_perspective == "behind_pitcher":
+                    mean_conf = sum(pt[3] for pt in c) / len(c)
+                    return (len(c) ** 2.0) * mean_conf * (1.0 + min(60.0, disp) / 30.0)
                 return speed * disp * (len(c) ** 1.5)
 
             best_chain = max(chains, key=score_chain)
