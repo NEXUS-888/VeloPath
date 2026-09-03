@@ -1,4 +1,4 @@
-﻿"""
+"""
 VeloPath AI - Model Manager
 Handles automatic model weights discovery, downloading, caching,
 and seamless GPU (CUDA / MPS / CPU) device selection across platforms.
@@ -77,17 +77,48 @@ def download_model_weights(target_path: str, url: str = DEFAULT_WEIGHTS_URL) -> 
         )
 
 
+def reassemble_from_parts(target_path: str) -> Optional[str]:
+    """
+    Checks if repository split parts exist (models/weights_parts/ball_trackingv4.pt.part*)
+    and combines them into a complete model file in milliseconds without network access.
+    """
+    root = get_project_root()
+    part1 = os.path.join(root, "models", "weights_parts", "ball_trackingv4.pt.part1")
+    part2 = os.path.join(root, "models", "weights_parts", "ball_trackingv4.pt.part2")
+    
+    if os.path.exists(part1) and os.path.exists(part2):
+        print(f"[VeloPath AI] Reassembling model weights from repository packages...")
+        os.makedirs(os.path.dirname(target_path), exist_ok=True)
+        temp_path = target_path + ".assembling"
+        with open(temp_path, "wb") as f_out:
+            with open(part1, "rb") as f1:
+                f_out.write(f1.read())
+            with open(part2, "rb") as f2:
+                f_out.write(f2.read())
+        if os.path.exists(target_path):
+            os.remove(target_path)
+        os.rename(temp_path, target_path)
+        print(f"[VeloPath AI] Successfully assembled {os.path.basename(target_path)} ({os.path.getsize(target_path)/1024/1024:.1f} MB)!\n")
+        return target_path
+    return None
+
+
 def resolve_model_path(auto_download: bool = True) -> Optional[str]:
     """
-    Finds the model weights on disk or downloads them automatically.
+    Finds the model weights on disk, reassembles from repo parts, or downloads them.
     """
     candidates = get_default_model_paths()
     for path in candidates:
         if os.path.exists(path) and os.path.getsize(path) > 10 * 1024 * 1024:
             return os.path.abspath(path)
 
+    # Reassemble from repo parts (instant, zero internet needed)
+    target_path = candidates[0]  # models/ball_trackingv4.pt
+    assembled = reassemble_from_parts(target_path)
+    if assembled and os.path.exists(assembled):
+        return os.path.abspath(assembled)
+
     if auto_download:
-        target_path = candidates[0]  # models/ball_trackingv4.pt
         try:
             return download_model_weights(target_path)
         except Exception as e:

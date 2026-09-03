@@ -26,6 +26,7 @@ outputs/
 *.tmp.*
 WhatsApp Video*
 real_world*
+other_laptop*
 real world test videos/
 !assets/sample_pitch.mp4
 
