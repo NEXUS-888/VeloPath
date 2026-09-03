@@ -42,6 +42,18 @@ async def serve_index():
         return HTMLResponse(content=f.read())
 
 
+@app.get("/api/health")
+@app.get("/health")
+async def health_check():
+    return {"status": "ok", "app": "VeloPath AI", "port": 8000}
+
+
+@app.get("/video_feed")
+async def legacy_video_feed():
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/")
+
+
 _SAMPLE_CACHE = None
 
 
