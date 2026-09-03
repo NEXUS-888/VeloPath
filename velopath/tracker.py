@@ -185,8 +185,9 @@ class PitchTracker:
         # Resolution-adaptive area and radius limits
         scale = max(1.0, (w * h) / (640.0 * 360.0))
         min_area = max(6, int(8 * scale * 0.3))
-        max_area = max(500, int(900 * scale))
-        max_r = max(22.0, 24.0 * np.sqrt(scale))
+        # Baseballs in flight are compact; cap area to prevent detecting human pants or legs
+        max_area = int(min(1200, 450 * scale))
+        max_r = max(18.0, 16.0 * np.sqrt(scale))
 
         cnts, _ = cv2.findContours(masked, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         candidates = []
@@ -196,7 +197,8 @@ class PitchTracker:
                 perimeter = cv2.arcLength(c, True)
                 if perimeter > 0:
                     circularity = 4.0 * np.pi * area / (perimeter * perimeter)
-                    if circularity > 0.30:
+                    # Real balls are round (circularity >= 0.55); reject elongated pants/limbs
+                    if circularity >= 0.55:
                         (cx, cy), r = cv2.minEnclosingCircle(c)
                         if 2.0 <= r <= max_r:
                             candidates.append((cx, cy, r, circularity * (area / 100.0)))
