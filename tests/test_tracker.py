@@ -78,3 +78,58 @@ def test_extrapolate_measured_flight():
     # Should travel upward into target
     assert extrapolated[-1].y < measured[-1].y
     assert extrapolated[-1].frame_idx > measured[-1].frame_idx
+
+
+def test_detect_red_cricket_ball_synthetic():
+    """Verify red/terracotta leather cricket ball is detected in auto and cricket mode."""
+    import numpy as np
+    import cv2
+    from velopath.tracker import PitchTracker
+
+    tracker = PitchTracker()
+    # Green grass background (BGR: ~35, 120, 45)
+    frame = np.full((400, 400, 3), (35, 120, 45), dtype=np.uint8)
+    prev_frame = np.full((400, 400, 3), (35, 120, 45), dtype=np.uint8)
+
+    # Red/terracotta cricket ball: BGR (25, 35, 175)
+    cv2.circle(prev_frame, (180, 180), 8, (25, 35, 175), -1)
+    cv2.circle(frame, (215, 215), 8, (25, 35, 175), -1)
+
+    cand = tracker.detect_color_motion_ball(
+        frame=frame,
+        prev_frame=prev_frame,
+        corridor=(100, 300, 100, 300),
+        ball_type="auto"
+    )
+    assert cand is not None, "Red cricket ball must be detected"
+    cx, cy, r, conf = cand
+    assert pytest.approx(cx, abs=6.0) == 215.0
+    assert pytest.approx(cy, abs=6.0) == 215.0
+
+
+def test_detect_pink_cricket_ball_synthetic():
+    """Verify hot pink / magenta training cricket ball is detected in auto mode."""
+    import numpy as np
+    import cv2
+    from velopath.tracker import PitchTracker
+
+    tracker = PitchTracker()
+    # Outdoor field background (BGR: ~40, 130, 50)
+    frame = np.full((400, 400, 3), (40, 130, 50), dtype=np.uint8)
+    prev_frame = np.full((400, 400, 3), (40, 130, 50), dtype=np.uint8)
+
+    # Hot pink ball: BGR (160, 40, 230)
+    cv2.circle(prev_frame, (190, 190), 8, (160, 40, 230), -1)
+    cv2.circle(frame, (220, 220), 8, (160, 40, 230), -1)
+
+    cand = tracker.detect_color_motion_ball(
+        frame=frame,
+        prev_frame=prev_frame,
+        corridor=(100, 300, 100, 300),
+        ball_type="auto"
+    )
+    assert cand is not None, "Pink cricket ball must be detected"
+    cx, cy, r, conf = cand
+    assert pytest.approx(cx, abs=6.0) == 220.0
+    assert pytest.approx(cy, abs=6.0) == 220.0
+

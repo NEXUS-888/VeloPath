@@ -138,11 +138,13 @@ class PitchTracker:
         frame: np.ndarray,
         prev_frame: Optional[np.ndarray],
         corridor: Tuple[float, float, float, float],
-        ball_type: str = "auto"
+        ball_type: str = "auto",
+        prev_frame2: Optional[np.ndarray] = None
     ) -> Optional[Tuple[float, float, float, float]]:
         """
-        Detects bright yellow/neon tennis balls and high-contrast cricket balls
-        using adaptive HSV filtering, circularity validation, and frame differencing.
+        Detects bright yellow/neon tennis balls, white baseballs, red leather cricket balls,
+        and hot pink training balls using adaptive HSV filtering, multi-frame differencing,
+        and size-fit scoring.
         Returns: (cx, cy, radius, confidence) or None.
         """
         h, w = frame.shape[:2]
@@ -150,20 +152,21 @@ class PitchTracker:
 
         hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
 
-        # Optic-yellow / neon tennis / tape ball mask in outdoor daylight
-        # H: 12-82 covers neon green-yellow tennis balls, tape balls, and outdoor softballs
-        mask_yellow = cv2.inRange(hsv, (12, 35, 45), (82, 255, 255))
-        # High-brightness white/light ball mask
-        mask_white = cv2.inRange(hsv, (0, 0, 180), (180, 50, 255))
+        # 1. Optic-yellow / neon tennis / tape ball mask
+        mask_yellow = cv2.inRange(hsv, (18, 50, 60), (45, 255, 255))
 
-        if ball_type == "tennis_cricket":
-            color_mask = mask_yellow
-        elif ball_type == "baseball":
-            color_mask = mask_white
-        else: # auto
-            color_mask = cv2.bitwise_or(mask_yellow, mask_white)
+        # 2. High-brightness white/light baseball mask (low saturation, high brightness)
+        mask_white = cv2.inRange(hsv, (0, 0, 160), (180, 45, 255))
 
-        # Restrict to flight corridor
+        # 3. Red / Terracotta leather cricket ball mask (wraps around 0/180)
+        mask_red1 = cv2.inRange(hsv, (0, 35, 35), (15, 255, 255))
+        mask_red2 = cv2.inRange(hsv, (165, 35, 35), (180, 255, 255))
+        mask_red = cv2.bitwise_or(mask_red1, mask_red2)
+
+        # 4. Hot Pink / Magenta cricket training ball mask
+        mask_pink = cv2.inRange(hsv, (140, 35, 45), (178, 255, 255))
+
+        # Corridor mask
         corridor_mask = np.zeros((h, w), dtype=np.uint8)
         cv2.rectangle(
             corridor_mask,
@@ -171,42 +174,72 @@ class PitchTracker:
             (int(min(w - 1, c_x2)), int(min(h - 1, c_y2))),
             255, -1
         )
-        masked = cv2.bitwise_and(color_mask, corridor_mask)
 
-        # Motion difference: only detect moving objects (ignores static leaves/dirt)
+        # Multi-frame motion difference: resilient to dropped/duplicate frames
         if prev_frame is not None:
-            diff = cv2.absdiff(frame, prev_frame)
-            diff_gray = cv2.cvtColor(diff, cv2.COLOR_BGR2GRAY)
-            _, diff_thresh = cv2.threshold(diff_gray, 14, 255, cv2.THRESH_BINARY)
-            masked = cv2.bitwise_and(masked, diff_thresh)
+            diff1 = cv2.absdiff(frame, prev_frame)
+            diff_gray1 = cv2.cvtColor(diff1, cv2.COLOR_BGR2GRAY)
+            _, diff_thresh1 = cv2.threshold(diff_gray1, 12, 255, cv2.THRESH_BINARY)
+            if prev_frame2 is not None:
+                diff2 = cv2.absdiff(frame, prev_frame2)
+                diff_gray2 = cv2.cvtColor(diff2, cv2.COLOR_BGR2GRAY)
+                _, diff_thresh2 = cv2.threshold(diff_gray2, 12, 255, cv2.THRESH_BINARY)
+                diff_thresh = cv2.bitwise_or(diff_thresh1, diff_thresh2)
+            else:
+                diff_thresh = diff_thresh1
         else:
             return None
 
+        # Build candidate masks based on ball_type
+        # In auto mode, saturated balls (pink, red, yellow) are evaluated first to avoid
+        # In auto mode, test individual color channels sequentially: pink, red, yellow, then white.
+        # This prevents human skin (red-ish) or white concrete from polluting pink/yellow balls.
+        if ball_type in ["pink", "pink_cricket", "training"]:
+            color_masks_to_test = [mask_pink]
+        elif ball_type in ["red", "cricket", "leather_cricket"]:
+            color_masks_to_test = [mask_red]
+        elif ball_type in ["tennis_cricket", "tennis", "yellow"]:
+            color_masks_to_test = [mask_yellow]
+        elif ball_type == "baseball":
+            color_masks_to_test = [mask_white]
+        else:  # auto
+            color_masks_to_test = [mask_pink, mask_red, mask_yellow, mask_white]
+
         # Resolution-adaptive area and radius limits
         scale = max(1.0, (w * h) / (640.0 * 360.0))
-        min_area = max(6, int(8 * scale * 0.3))
-        # Baseballs in flight are compact; cap area to prevent detecting human pants or legs
-        max_area = int(min(1200, 450 * scale))
-        max_r = max(18.0, 16.0 * np.sqrt(scale))
+        sqrt_scale = float(np.sqrt(scale))
+        min_area = max(10, int(12.0 * sqrt_scale))
+        max_area = int(min(5000.0, 700.0 * sqrt_scale))
+        min_r = max(2.5, 1.5 * sqrt_scale)
+        max_r = max(18.0, 8.0 * sqrt_scale)
+        target_r = 4.5 * sqrt_scale
 
-        cnts, _ = cv2.findContours(masked, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         candidates = []
-        for c in cnts:
-            area = cv2.contourArea(c)
-            if min_area <= area <= max_area:
-                perimeter = cv2.arcLength(c, True)
-                if perimeter > 0:
-                    circularity = 4.0 * np.pi * area / (perimeter * perimeter)
-                    # Real balls are round (circularity >= 0.55); reject elongated pants/limbs
-                    if circularity >= 0.55:
-                        (cx, cy), r = cv2.minEnclosingCircle(c)
-                        if 2.0 <= r <= max_r:
-                            candidates.append((cx, cy, r, circularity * (area / 100.0)))
+        for c_mask in color_masks_to_test:
+            masked = cv2.bitwise_and(c_mask, corridor_mask)
+            masked = cv2.bitwise_and(masked, diff_thresh)
+
+            cnts, _ = cv2.findContours(masked, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            for c in cnts:
+                area = cv2.contourArea(c)
+                if min_area <= area <= max_area:
+                    perimeter = cv2.arcLength(c, True)
+                    if perimeter > 0:
+                        circularity = 4.0 * np.pi * area / (perimeter * perimeter)
+                        # Pitched balls in fast motion create motion streaks (circularity >= 0.20)
+                        if circularity >= 0.20:
+                            (cx, cy), r = cv2.minEnclosingCircle(c)
+                            if min_r <= r <= max_r:
+                                size_fit = 1.0 / (1.0 + abs(r - target_r) / (0.6 * target_r))
+                                score = (min(1.0, circularity) ** 1.0) * size_fit
+                                candidates.append((cx, cy, r, score))
+            # If colored mask produced good candidates, don't fall back to noisy white mask
+            if candidates:
+                break
 
         if candidates:
-            # Pick highest score
             best = max(candidates, key=lambda item: item[3])
-            conf = min(0.85, 0.40 + best[3] * 0.1)
+            conf = min(0.90, 0.40 + best[3] * 0.6)
             return (best[0], best[1], best[2], conf)
         return None
 
@@ -246,31 +279,31 @@ class PitchTracker:
 
         # Perspective-aware spatial corridor (covers release to plate)
         is_portrait = height > width
-        if resolved_perspective == "broadcast":
-            corridor_x1, corridor_x2 = width * 0.18, width * 0.82
-            corridor_y1, corridor_y2 = height * 0.12, height * 0.80
-        elif resolved_perspective == "side_view":
-            corridor_x1, corridor_x2 = width * 0.05, width * 0.95
-            corridor_y1, corridor_y2 = height * 0.10, height * 0.85
-        elif resolved_perspective == "behind_pitcher":
-            # Behind bowler/pitcher looking towards net / plate
-            # In portrait videos, exclude bottom 35% where pitcher's shoes/legs move
-            corridor_x1, corridor_x2 = width * 0.15, width * 0.85
-            corridor_y1 = height * 0.12
-            corridor_y2 = height * 0.65 if is_portrait else height * 0.75
-        else:  # behind_plate
-            corridor_x1, corridor_x2 = width * 0.12, width * 0.88
-            corridor_y1, corridor_y2 = height * 0.12, height * 0.88
-
-        # 2. Coarse Candidate Scan across the entire video
-        # At 30 FPS, flight lasts only 6-10 frames (use stride 2-3). At 60 FPS, use stride 4-6.
-        if fps <= 35:
-            coarse_stride = max(2, min(3, int(round(fps * 0.08))))
+        if resolved_perspective == "behind_pitcher":
+            # Pitcher foreground typically left, tunnel/plate in center-right
+            corridor_x1 = width * 0.35
+            corridor_x2 = width * 0.88
+            corridor_y1 = height * 0.15
+            corridor_y2 = height * 0.80 if is_portrait else height * 0.88
         else:
-            coarse_stride = max(4, min(7, int(round(fps * 0.10))))
+            corridor_x1 = width * 0.15
+            corridor_x2 = width * 0.88
+            corridor_y1 = height * 0.10
+            corridor_y2 = height * 0.88
+
+        # 2. Coarse Candidate Scan across the video
+        # For short clips (<= 180 frames, ~1-3 seconds), use stride 1-2 so fast 15-frame pitches are never missed
+        if total_frames <= 180:
+            coarse_stride = 1 if fps <= 35 else 2
+        elif fps <= 35:
+            coarse_stride = 2
+        else:
+            coarse_stride = max(3, min(5, int(round(fps * 0.06))))
+
         coarse_hits = []
         cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
         prev_coarse_frame = None
+        prev_coarse_frame2 = None
 
         crop_x1 = max(0, int(corridor_x1))
         crop_y1 = max(0, int(corridor_y1))
@@ -297,12 +330,13 @@ class PitchTracker:
                 except Exception:
                     pass
 
-            if hit is None and (self.model is None) and (ball_type in ["auto", "tennis_cricket"]):
+            if hit is None:
                 cand = self.detect_color_motion_ball(
                     frame=frame,
                     prev_frame=prev_coarse_frame,
                     corridor=(corridor_x1, corridor_x2, corridor_y1, corridor_y2),
-                    ball_type=ball_type
+                    ball_type=ball_type,
+                    prev_frame2=prev_coarse_frame2
                 )
                 if cand:
                     hit = (f, cand[0], cand[1], cand[3], cand[2] * 2.0)
@@ -310,18 +344,20 @@ class PitchTracker:
             if hit:
                 coarse_hits.append(hit)
 
+            prev_coarse_frame2 = prev_coarse_frame
             prev_coarse_frame = frame.copy()
             if progress_callback:
                 progress_callback((f / float(total_frames)) * 0.35)
 
         # 3. Cluster coarse hits into consecutive temporal chains
         chains = []
+        max_step_dist = 220.0 * max(1.0, width / 1280.0)
         if coarse_hits:
             curr_chain = [coarse_hits[0]]
             for h_pt in coarse_hits[1:]:
                 dt = h_pt[0] - curr_chain[-1][0]
                 dist = np.hypot(h_pt[1] - curr_chain[-1][1], h_pt[2] - curr_chain[-1][2])
-                if dt <= (coarse_stride * 3) and dist < (width * 0.30):
+                if dt <= (coarse_stride * 3) and dist < max_step_dist:
                     curr_chain.append(h_pt)
                 else:
                     if len(curr_chain) >= 2:
@@ -331,18 +367,33 @@ class PitchTracker:
                 chains.append(curr_chain)
 
         if chains:
-            # Pick best flight chain (weighted by ballistic speed and net displacement)
-            # Fast pitch flight has high speed (> 4 px/frame) and distinct trajectory displacement
+            # Pick best flight chain (weighted by ballistic speed, net displacement, and temporal delivery window)
             def score_chain(c):
                 dt = max(1, c[-1][0] - c[0][0])
                 disp = np.hypot(c[-1][1] - c[0][1], c[-1][2] - c[0][2])
+                dy = c[-1][2] - c[0][2]
                 speed = disp / float(dt)
-                # In behind_pitcher view, ball moves in depth away from camera (small 2D screen disp)
-                # Chain length (number of continuous detections) and confidence are the primary signals
-                if resolved_perspective == "behind_pitcher":
-                    mean_conf = sum(pt[3] for pt in c) / len(c)
-                    return (len(c) ** 2.0) * mean_conf * (1.0 + min(60.0, disp) / 30.0)
-                return speed * disp * (len(c) ** 1.5)
+                # Stationary candidate rejection
+                if disp < 25.0 or speed < 0.8:
+                    return 0.0001
+                # Reject wild camera pans sweeping across whole screen
+                if disp > (width * 0.70):
+                    return 0.0001
+                # Reject backward upward motions in depth views
+                if resolved_perspective in ["behind_pitcher", "behind_plate"] and dy < -60.0:
+                    return 0.0001
+                # Calculate straightness
+                path_len = sum(np.hypot(c[i+1][1]-c[i][1], c[i+1][2]-c[i][2]) for i in range(len(c)-1))
+                straightness = disp / max(1.0, path_len)
+                if straightness < 0.60:
+                    return 0.0001
+
+                # Favor chains in the active pitch delivery window (first 55% of clip) over post-pitch actions (bat swings)
+                start_frac = c[0][0] / float(max(1, total_frames))
+                temporal_factor = 1.3 if start_frac <= 0.55 else max(0.3, 1.0 - (start_frac - 0.55) * 2.0)
+
+                mean_conf = sum(pt[3] for pt in c) / len(c)
+                return (len(c) ** 2.0) * straightness * mean_conf * np.sqrt(disp) * temporal_factor
 
             best_chain = max(chains, key=score_chain)
             pitch_start = max(0, best_chain[0][0] - (coarse_stride * 2))
@@ -356,6 +407,7 @@ class PitchTracker:
         detected_points: List[TrajectoryPoint] = []
         cap.set(cv2.CAP_PROP_POS_FRAMES, pitch_start)
         prev_frame = None
+        prev_frame2 = None
         curr_frame = pitch_start
         fine_total = max(1, pitch_end - pitch_start)
 
@@ -391,13 +443,14 @@ class PitchTracker:
                 except Exception:
                     pass
 
-            # Pass B: Adaptive Color + Motion Filter
-            if pt_found is None and (ball_type in ["auto", "tennis_cricket"]):
+            # Pass B: Adaptive Color + Multi-frame Motion Filter
+            if pt_found is None:
                 color_cand = self.detect_color_motion_ball(
                     frame=frame,
                     prev_frame=prev_frame,
                     corridor=(corridor_x1, corridor_x2, corridor_y1, corridor_y2),
-                    ball_type=ball_type
+                    ball_type=ball_type,
+                    prev_frame2=prev_frame2
                 )
                 if color_cand:
                     cx, cy, r, c_conf = color_cand
@@ -414,11 +467,13 @@ class PitchTracker:
                     last_pt = detected_points[-1]
                     dist = np.hypot(pt_found.x - last_pt.x, pt_found.y - last_pt.y)
                     dt = max(1, pt_found.frame_idx - last_pt.frame_idx)
-                    if (dist / dt) < 150.0:
+                    max_speed = 150.0 * max(1.0, width / 1280.0)
+                    if (dist / dt) < max_speed:
                         detected_points.append(pt_found)
                 else:
                     detected_points.append(pt_found)
 
+            prev_frame2 = prev_frame
             prev_frame = frame.copy()
 
             if progress_callback:
@@ -432,11 +487,12 @@ class PitchTracker:
         if len(detected_points) >= 3:
             f_chains = []
             curr_c = [detected_points[0]]
+            max_cluster_dist = 100.0 * max(1.0, width / 1280.0)
             for pt in detected_points[1:]:
                 prev_pt = curr_c[-1]
                 dt = pt.frame_idx - prev_pt.frame_idx
                 dist = np.hypot(pt.x - prev_pt.x, pt.y - prev_pt.y)
-                if dt <= 3 and dist < 100.0:
+                if dt <= 3 and dist < max_cluster_dist:
                     curr_c.append(pt)
                 else:
                     if len(curr_c) >= 2:
@@ -444,12 +500,31 @@ class PitchTracker:
                     curr_c = [pt]
             if len(curr_c) >= 2:
                 f_chains.append(curr_c)
-            if f_chains:
-                best_fine = max(
-                    f_chains,
-                    key=lambda c: len(c) * (1.0 + np.hypot(c[-1].x - c[0].x, c[-1].y - c[0].y))
-                )
+
+            # Reject stationary noise chains (must have real displacement across flight)
+            def score_fine_chain(c):
+                dt = max(1, c[-1].frame_idx - c[0].frame_idx)
+                disp = np.hypot(c[-1].x - c[0].x, c[-1].y - c[0].y)
+                dy = c[-1].y - c[0].y
+                if disp < 25.0:
+                    return 0.0001
+                if resolved_perspective in ["behind_pitcher", "behind_plate"] and dy < -60.0:
+                    return 0.0001
+                path_len = sum(np.hypot(c[i+1].x - c[i].x, c[i+1].y - c[i].y) for i in range(len(c)-1))
+                straightness = disp / max(1.0, path_len)
+                if straightness < 0.60:
+                    return 0.0001
+                start_frac = c[0].frame_idx / float(max(1, total_frames))
+                temporal_factor = 1.3 if start_frac <= 0.55 else max(0.3, 1.0 - (start_frac - 0.55) * 2.0)
+                mean_conf = sum(pt.conf for pt in c) / len(c)
+                return (len(c) ** 2.0) * straightness * mean_conf * np.sqrt(disp) * temporal_factor
+
+            valid_chains = [c for c in f_chains if score_fine_chain(c) > 0.001]
+            if valid_chains:
+                best_fine = max(valid_chains, key=score_fine_chain)
                 detected_points = best_fine
+            elif f_chains:
+                detected_points = max(f_chains, key=lambda c: len(c))
 
         # 4. Trajectory Completion: Ballistic Fitting or Perspective Arc
         if len(detected_points) >= 2:

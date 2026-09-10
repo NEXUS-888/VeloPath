@@ -56,12 +56,24 @@ class StrikeZone:
         Properly scaled to match regulation MLB home plate and batter strike zone.
         """
         is_broadcast = (view_type == "broadcast") or (view_type == "auto" and (width / float(height)) > 1.3)
-        if view_type == "behind_pitcher":
-            # Pitcher foreground, batter & catcher in mid-distance in front of net
-            cx = width * 0.48
-            cy = height * 0.42
+        if view_type in ["behind_plate", "behind_catcher"]:
+            # Catcher and batter in foreground/midground
+            cx = width * 0.62
+            cy = height * 0.58
+            zw = width * 0.16
+            zh = height * 0.20
+            return cls(
+                x_min=cx - (zw / 2.0),
+                y_min=cy - (zh / 2.0),
+                x_max=cx + (zw / 2.0),
+                y_max=cy + (zh / 2.0)
+            )
+        elif view_type == "behind_pitcher":
+            # Pitcher foreground, batter & catcher in mid-distance
+            cx = width * 0.65 if (width / float(height)) > 1.3 else width * 0.50
+            cy = height * 0.54
             zw = width * 0.14
-            zh = height * 0.12
+            zh = height * 0.18
             return cls(
                 x_min=cx - (zw / 2.0),
                 y_min=cy - (zh / 2.0),
