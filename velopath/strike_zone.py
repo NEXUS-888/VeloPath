@@ -50,14 +50,61 @@ class StrikeZone:
         return cls(x_min=x_min, y_min=y_min, x_max=x_max, y_max=y_max)
 
     @classmethod
-    def get_preset_zone(cls, width: int, height: int, view_type: str = "auto") -> "StrikeZone":
+    def get_preset_zone(
+        cls,
+        width: int,
+        height: int,
+        view_type: str = "auto",
+        plate_point: Optional[Tuple[float, float]] = None
+    ) -> "StrikeZone":
         """
         Returns calibrated strike zone for Broadcast or Mobile camera perspective.
         Properly scaled to match regulation MLB home plate and batter strike zone.
+        If plate_point (x, y) is provided, dynamically anchors the strike zone over home plate.
         """
-        is_broadcast = (view_type == "broadcast") or (view_type == "auto" and (width / float(height)) > 1.3)
+        is_portrait = height > width
+        aspect = width / float(height)
+
+        # 1. Dynamic anchoring if home plate crossing point is known
+        if plate_point is not None:
+            px, py = plate_point
+            if (width * 0.05) <= px <= (width * 0.95) and (height * 0.05) <= py <= (height * 0.95):
+                if view_type in ["behind_plate", "behind_catcher"]:
+                    zw = width * 0.16
+                    zh = height * 0.20
+                    cx = px
+                    cy = max(zh / 2.0, py - zh * 0.35)
+                    return cls(
+                        x_min=cx - (zw / 2.0),
+                        y_min=cy - (zh / 2.0),
+                        x_max=cx + (zw / 2.0),
+                        y_max=cy + (zh / 2.0)
+                    )
+                elif view_type == "behind_pitcher":
+                    zw = width * 0.14
+                    zh = height * 0.18
+                    cx = px
+                    cy = max(zh / 2.0, py - zh * 0.35)
+                    return cls(
+                        x_min=cx - (zw / 2.0),
+                        y_min=cy - (zh / 2.0),
+                        x_max=cx + (zw / 2.0),
+                        y_max=cy + (zh / 2.0)
+                    )
+                elif view_type == "broadcast":
+                    zw = width * 0.062
+                    zh = height * 0.116
+                    cx = px
+                    cy = max(zh / 2.0, py - zh * 0.45)
+                    return cls(
+                        x_min=cx - (zw / 2.0),
+                        y_min=cy - (zh / 2.0),
+                        x_max=cx + (zw / 2.0),
+                        y_max=cy + (zh / 2.0)
+                    )
+
+        # 2. Preset zones based on perspective
         if view_type in ["behind_plate", "behind_catcher"]:
-            # Catcher and batter in foreground/midground
             cx = width * 0.62
             cy = height * 0.58
             zw = width * 0.16
@@ -69,8 +116,7 @@ class StrikeZone:
                 y_max=cy + (zh / 2.0)
             )
         elif view_type == "behind_pitcher":
-            # Pitcher foreground, batter & catcher in mid-distance
-            cx = width * 0.65 if (width / float(height)) > 1.3 else width * 0.50
+            cx = width * 0.65 if aspect > 1.3 else width * 0.50
             cy = height * 0.54
             zw = width * 0.14
             zh = height * 0.18
@@ -80,9 +126,7 @@ class StrikeZone:
                 x_max=cx + (zw / 2.0),
                 y_max=cy + (zh / 2.0)
             )
-        elif is_broadcast:
-            # Broadcast Center-Field Camera (Home plate in front of catcher)
-            # Tightly calibrated: 118px wide by 126px tall in 1080p
+        elif view_type == "broadcast":
             cx = width * 0.558
             cy = height * 0.405
             zw = width * 0.062
@@ -94,16 +138,15 @@ class StrikeZone:
                 y_max=cy + (zh / 2.0)
             )
         else:
-            # Behind-Home / Mobile Smartphone Camera (Home plate in lower center foreground)
-            zone_w = width * 0.24
-            zone_h = height * 0.17
-            zx_center = width * 0.50
-            zy_center = height * 0.68
+            cx = width * 0.60 if aspect > 1.3 else width * 0.50
+            cy = height * 0.54
+            zw = width * 0.16
+            zh = height * 0.18
             return cls(
-                x_min=zx_center - (zone_w / 2.0),
-                y_min=zy_center - (zone_h / 2.0),
-                x_max=zx_center + (zone_w / 2.0),
-                y_max=zy_center + (zone_h / 2.0)
+                x_min=cx - (zw / 2.0),
+                y_min=cy - (zh / 2.0),
+                x_max=cx + (zw / 2.0),
+                y_max=cy + (zh / 2.0)
             )
 
 
