@@ -151,6 +151,8 @@ class PitchTracker:
         and size-fit scoring.
         Returns: (cx, cy, radius, confidence) or None.
         """
+        if frame is None:
+            return None
         h, w = frame.shape[:2]
         c_x1, c_x2, c_y1, c_y2 = corridor
 
@@ -443,7 +445,6 @@ class PitchTracker:
                     radius=max(4.0, float(h[4]) / 2.0)
                 ) for h in coarse_hits
             ]
-            cap.release()
             if progress_callback:
                 progress_callback(1.0)
         else:
@@ -455,98 +456,98 @@ class PitchTracker:
 
             while curr_frame < pitch_end:
                 ret, frame = cap.read()
-                if not ret:
+                if not ret or frame is None:
                     break
 
-            pt_found = None
-            prefer_color = (ball_type in ["red", "pink", "yellow", "orange", "leather"]) or (self.device == "cpu")
+                pt_found = None
+                prefer_color = (ball_type in ["red", "pink", "yellow", "orange", "leather"]) or (self.device == "cpu")
 
-            if prefer_color:
-                color_cand = self.detect_color_motion_ball(
-                    frame=frame,
-                    prev_frame=prev_frame,
-                    corridor=(corridor_x1, corridor_x2, corridor_y1, corridor_y2),
-                    ball_type=ball_type,
-                    prev_frame2=prev_frame2
-                )
-                if color_cand:
-                    cx, cy, r, c_conf = color_cand
-                    pt_found = TrajectoryPoint(
-                        frame_idx=curr_frame,
-                        x=cx,
-                        y=cy,
-                        conf=c_conf,
-                        radius=max(4.0, r)
+                if prefer_color:
+                    color_cand = self.detect_color_motion_ball(
+                        frame=frame,
+                        prev_frame=prev_frame,
+                        corridor=(corridor_x1, corridor_x2, corridor_y1, corridor_y2),
+                        ball_type=ball_type,
+                        prev_frame2=prev_frame2
                     )
+                    if color_cand:
+                        cx, cy, r, c_conf = color_cand
+                        pt_found = TrajectoryPoint(
+                            frame_idx=curr_frame,
+                            x=cx,
+                            y=cy,
+                            conf=c_conf,
+                            radius=max(4.0, r)
+                        )
 
-            # Pass A: High-res YOLO Detection on Corridor Crop
-            if pt_found is None and self.model and (curr_frame % frame_stride == 0):
-                try:
-                    crop = frame[crop_y1:crop_y2, crop_x1:crop_x2]
-                    res = self.model.predict(crop, conf=conf_thresh, verbose=False, imgsz=480, device=self.device)
-                    if len(res[0].boxes) > 0:
-                        valid_boxes = []
-                        for b in res[0].boxes:
-                            bx1, by1, bx2, by2 = b.xyxy[0].tolist()
-                            bcx = (bx1 + bx2) / 2.0 + crop_x1
-                            bcy = (by1 + by2) / 2.0 + crop_y1
-                            valid_boxes.append((b, bcx, bcy, bx2 - bx1))
-                        if valid_boxes:
-                            best_box = max(valid_boxes, key=lambda item: float(item[0].conf[0]))
-                            b_obj, cx, cy, sz = best_box
-                            # Verify motion inside YOLO box to reject static posts/fixtures
-                            is_moving = True
-                            if prev_frame is not None:
-                                bx1, by1, bx2, by2 = b_obj.xyxy[0].tolist()
-                                bx1 = max(0, min(width - 1, int(bx1 + crop_x1)))
-                                bx2 = max(0, min(width, int(bx2 + crop_x1)))
-                                by1 = max(0, min(height - 1, int(by1 + crop_y1)))
-                                by2 = max(0, min(height, int(by2 + crop_y1)))
-                                if (bx2 > bx1) and (by2 > by1):
-                                    diff_box = cv2.absdiff(frame[by1:by2, bx1:bx2], prev_frame[by1:by2, bx1:bx2])
-                                    gray_box = cv2.cvtColor(diff_box, cv2.COLOR_BGR2GRAY) if diff_box.ndim == 3 else diff_box
-                                    if np.mean(gray_box) < 6.0 and np.max(gray_box) < 18:
-                                        is_moving = False
-                            if is_moving:
-                                pt_found = TrajectoryPoint(
-                                    frame_idx=curr_frame,
-                                    x=cx,
-                                    y=cy,
-                                    conf=float(b_obj.conf[0]),
-                                    radius=max(4.0, sz / 2.0)
-                                )
-                except Exception:
-                    pass
+                # Pass A: High-res YOLO Detection on Corridor Crop
+                if pt_found is None and self.model and (curr_frame % frame_stride == 0):
+                    try:
+                        crop = frame[crop_y1:crop_y2, crop_x1:crop_x2]
+                        res = self.model.predict(crop, conf=conf_thresh, verbose=False, imgsz=480, device=self.device)
+                        if len(res[0].boxes) > 0:
+                            valid_boxes = []
+                            for b in res[0].boxes:
+                                bx1, by1, bx2, by2 = b.xyxy[0].tolist()
+                                bcx = (bx1 + bx2) / 2.0 + crop_x1
+                                bcy = (by1 + by2) / 2.0 + crop_y1
+                                valid_boxes.append((b, bcx, bcy, bx2 - bx1))
+                            if valid_boxes:
+                                best_box = max(valid_boxes, key=lambda item: float(item[0].conf[0]))
+                                b_obj, cx, cy, sz = best_box
+                                # Verify motion inside YOLO box to reject static posts/fixtures
+                                is_moving = True
+                                if prev_frame is not None:
+                                    bx1, by1, bx2, by2 = b_obj.xyxy[0].tolist()
+                                    bx1 = max(0, min(width - 1, int(bx1 + crop_x1)))
+                                    bx2 = max(0, min(width, int(bx2 + crop_x1)))
+                                    by1 = max(0, min(height - 1, int(by1 + crop_y1)))
+                                    by2 = max(0, min(height, int(by2 + crop_y1)))
+                                    if (bx2 > bx1) and (by2 > by1):
+                                        diff_box = cv2.absdiff(frame[by1:by2, bx1:bx2], prev_frame[by1:by2, bx1:bx2])
+                                        gray_box = cv2.cvtColor(diff_box, cv2.COLOR_BGR2GRAY) if diff_box.ndim == 3 else diff_box
+                                        if np.mean(gray_box) < 6.0 and np.max(gray_box) < 18:
+                                            is_moving = False
+                                if is_moving:
+                                    pt_found = TrajectoryPoint(
+                                        frame_idx=curr_frame,
+                                        x=cx,
+                                        y=cy,
+                                        conf=float(b_obj.conf[0]),
+                                        radius=max(4.0, sz / 2.0)
+                                    )
+                    except Exception:
+                        pass
 
-            # Fallback Pass B: Adaptive Color + Multi-frame Motion Filter if YOLO was tested first
-            if pt_found is None and not prefer_color:
-                color_cand = self.detect_color_motion_ball(
-                    frame=frame,
-                    prev_frame=prev_frame,
-                    corridor=(corridor_x1, corridor_x2, corridor_y1, corridor_y2),
-                    ball_type=ball_type,
-                    prev_frame2=prev_frame2
-                )
-                if color_cand:
-                    cx, cy, r, c_conf = color_cand
-                    pt_found = TrajectoryPoint(
-                        frame_idx=curr_frame,
-                        x=cx,
-                        y=cy,
-                        conf=c_conf,
-                        radius=max(4.0, r)
+                # Fallback Pass B: Adaptive Color + Multi-frame Motion Filter if YOLO was tested first
+                if pt_found is None and not prefer_color:
+                    color_cand = self.detect_color_motion_ball(
+                        frame=frame,
+                        prev_frame=prev_frame,
+                        corridor=(corridor_x1, corridor_x2, corridor_y1, corridor_y2),
+                        ball_type=ball_type,
+                        prev_frame2=prev_frame2
                     )
+                    if color_cand:
+                        cx, cy, r, c_conf = color_cand
+                        pt_found = TrajectoryPoint(
+                            frame_idx=curr_frame,
+                            x=cx,
+                            y=cy,
+                            conf=c_conf,
+                            radius=max(4.0, r)
+                        )
 
-            if pt_found:
-                fine_detected.append(pt_found)
+                if pt_found:
+                    fine_detected.append(pt_found)
 
-            prev_frame2 = prev_frame
-            prev_frame = frame.copy()
+                prev_frame2 = prev_frame
+                prev_frame = frame.copy()
 
-            if progress_callback:
-                progress_callback(0.35 + 0.65 * ((curr_frame - pitch_start) / float(fine_total)))
+                if progress_callback:
+                    progress_callback(0.35 + 0.65 * ((curr_frame - pitch_start) / float(fine_total)))
 
-            curr_frame += 1
+                curr_frame += 1
 
         cap.release()
 

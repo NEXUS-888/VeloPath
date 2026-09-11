@@ -76,6 +76,8 @@ class PitchRenderer:
         Renders a slim, aerodynamic Statcast 3D laser streamline with multi-layer
         emissive bloom, white-hot center laser core, and glowing baseball marker.
         """
+        if frame is None:
+            return frame
         active_points = [p for p in points if p.frame_idx <= current_frame_idx]
         if len(active_points) < 2:
             return frame
@@ -182,6 +184,8 @@ class PitchRenderer:
         Renders a sleek, modern broadcast-style strike zone (Apple TV / ESPN K-Zone aesthetic)
         with thin anti-aliased border, corner brackets, and subtle 3x3 dashed grid.
         """
+        if frame is None:
+            return frame
         x1, y1 = int(round(strike_zone.x_min)), int(round(strike_zone.y_min))
         x2, y2 = int(round(strike_zone.x_max)), int(round(strike_zone.y_max))
         w = x2 - x1
@@ -244,6 +248,8 @@ class PitchRenderer:
         Renders the signature Pitch Lab telemetric HUD card with
         responsive scaling and layout for both widescreen broadcast and mobile formats.
         """
+        if frame is None:
+            return frame
         h, w = frame.shape[:2]
         is_widescreen = (w / float(h)) > 1.3
         scale = max(0.65, min(1.8, w / 600.0))
@@ -363,6 +369,8 @@ class PitchRenderer:
         Draws an ultra-sleek, non-intrusive broadcast badge in the top-right corner.
         Takes up only 32px height, never obscuring the pitcher, home plate, or ball flight.
         """
+        if frame is None:
+            return frame
         h, w = frame.shape[:2]
         badge_text = f"{velocity_mph:.1f} MPH  |  {pitch_tag.upper()}"
         call_text = call_result.call if call_result else ""
