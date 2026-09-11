@@ -91,7 +91,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let isZoneCalibrating = false;
     let isHudVisible = true;
     let activeGraphicStyle = 'statcast_cyan';
-    let activePerspective = 'behind_pitcher';
+    let activePerspective = 'auto';
 
     // Active Strike Zone Geometry in native video pixels
     let strikeZone = {
@@ -237,20 +237,26 @@ document.addEventListener('DOMContentLoaded', () => {
     function applyPerspectivePreset(persp) {
         const vidW = currentPitchData?.video_resolution?.width || 1920;
         const vidH = currentPitchData?.video_resolution?.height || 1080;
+        const isPortrait = vidH > vidW;
 
-        if (persp === 'broadcast') {
+        let effectivePersp = persp;
+        if (persp === 'auto') {
+            effectivePersp = currentPitchData?.perspective || (isPortrait ? 'behind_pitcher' : 'behind_plate');
+        }
+
+        if (effectivePersp === 'broadcast') {
             strikeZone = {
                 cx: Math.round(vidW * 0.558),
                 cy: Math.round(vidH * 0.405),
                 w: Math.round(vidW * 0.062),
                 h: Math.round(vidH * 0.116),
             };
-        } else if (persp === 'behind_plate') {
+        } else if (effectivePersp === 'behind_plate' || effectivePersp === 'behind_catcher') {
             strikeZone = {
-                cx: Math.round(vidW * 0.50),
-                cy: Math.round(vidH * 0.68),
-                w: Math.round(vidW * 0.22),
-                h: Math.round(vidH * 0.18),
+                cx: Math.round(vidW * 0.68),
+                cy: Math.round(vidH * 0.58),
+                w: Math.round(vidW * 0.16),
+                h: Math.round(vidH * 0.22),
             };
         } else {
             // behind_pitcher
