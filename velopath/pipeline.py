@@ -1,7 +1,7 @@
 """
 End-to-end processing pipeline: Tracks ball, calculates speed, tests strike zone, and renders video.
 """
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Tuple, List
 import os
 import cv2
 import numpy as np
@@ -18,6 +18,41 @@ from velopath.physics import (
 )
 from velopath.strike_zone import StrikeZone, evaluate_pitch, PitchCallResult
 from velopath.renderer import PitchRenderer
+
+
+def find_plate_crossing_point(
+    trajectory_points: List[TrajectoryPoint],
+    strike_zone: StrikeZone,
+    ball_radius: float = 12.0
+) -> Tuple[float, float]:
+    """
+    Finds the trajectory point that crosses home plate and the strike zone.
+    If the pitch passes through the strike zone, returns the intersection point.
+    Otherwise, returns the point along the trajectory of closest approach to the strike zone center.
+    """
+    if not trajectory_points:
+        return ((strike_zone.x_min + strike_zone.x_max) / 2.0, (strike_zone.y_min + strike_zone.y_max) / 2.0)
+
+    sz_center_x = (strike_zone.x_min + strike_zone.x_max) / 2.0
+    sz_center_y = (strike_zone.y_min + strike_zone.y_max) / 2.0
+
+    min_dist = float("inf")
+    closest_pt = trajectory_points[-1]
+    intersecting_pt = None
+
+    for pt in trajectory_points:
+        dist = ((pt.x - sz_center_x) ** 2 + (pt.y - sz_center_y) ** 2) ** 0.5
+        if dist < min_dist:
+            min_dist = dist
+            closest_pt = pt
+
+        if (strike_zone.x_min - ball_radius <= pt.x <= strike_zone.x_max + ball_radius) and \
+           (strike_zone.y_min - ball_radius <= pt.y <= strike_zone.y_max + ball_radius):
+            if intersecting_pt is None:
+                intersecting_pt = pt
+
+    eval_pt = intersecting_pt if intersecting_pt is not None else closest_pt
+    return (float(eval_pt.x), float(eval_pt.y))
 
 
 def process_pitch_video(
@@ -121,8 +156,8 @@ def process_pitch_video(
     horz_break_in, vert_break_in = calculate_pitch_break(coords, pixels_per_inch=px_per_in)
     pitch_tag = classify_pitch_type(velocity_mph, vert_break_in, horz_break_in)
 
-    # Evaluate crossing point
-    plate_pt = (trajectory_points[-1].x, trajectory_points[-1].y)
+    # Evaluate crossing point at home plate
+    plate_pt = find_plate_crossing_point(trajectory_points, strike_zone, ball_radius=12.0)
     call_result = evaluate_pitch(
         plate_cross_point=plate_pt,
         strike_zone=strike_zone,
@@ -301,7 +336,7 @@ def rerender_pitch(
     horz_break_in, vert_break_in = calculate_pitch_break(coords, pixels_per_inch=px_per_in)
     pitch_tag = classify_pitch_type(velocity_mph, vert_break_in, horz_break_in)
 
-    plate_pt = (pts[-1].x, pts[-1].y)
+    plate_pt = find_plate_crossing_point(pts, strike_zone, ball_radius=12.0)
     call_result = evaluate_pitch(
         plate_cross_point=plate_pt,
         strike_zone=strike_zone,

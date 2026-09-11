@@ -28,6 +28,10 @@ WhatsApp Video*
 real_world*
 other_laptop*
 real world test videos/
+not good tracking/
+debug_*.jpg
+plate_inspection_*.jpg
+.tempmediaStorage/
 !assets/sample_pitch.mp4
 
 # IDEs

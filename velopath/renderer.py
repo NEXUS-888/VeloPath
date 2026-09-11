@@ -98,12 +98,12 @@ class PitchRenderer:
         xs = np.array([p.x for p in unique_pts], dtype=float)
         ys = np.array([p.y for p in unique_pts], dtype=float)
 
-        # High-resolution cubic spline interpolation
+        # High-resolution monotonic spline interpolation (PCHIP eliminates ringing and overshoot)
         try:
-            from scipy.interpolate import CubicSpline
+            from scipy.interpolate import PchipInterpolator
             if len(frames) >= 3:
-                cs_x = CubicSpline(frames, xs, bc_type='natural')
-                cs_y = CubicSpline(frames, ys, bc_type='natural')
+                cs_x = PchipInterpolator(frames, xs, extrapolate=True)
+                cs_y = PchipInterpolator(frames, ys, extrapolate=True)
             else:
                 from scipy.interpolate import interp1d
                 cs_x = interp1d(frames, xs, kind='linear', fill_value="extrapolate")

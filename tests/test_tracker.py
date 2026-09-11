@@ -133,3 +133,60 @@ def test_detect_pink_cricket_ball_synthetic():
     assert pytest.approx(cx, abs=6.0) == 220.0
     assert pytest.approx(cy, abs=6.0) == 220.0
 
+
+def test_detect_orange_red_leather_ball_hue_extended():
+    """Verify orange-red leather cricket ball with H=16 (sunlight highlight) is detected."""
+    import numpy as np
+    import cv2
+    from velopath.tracker import PitchTracker
+
+    tracker = PitchTracker()
+    frame = np.full((400, 400, 3), (40, 130, 50), dtype=np.uint8)
+    prev_frame = np.full((400, 400, 3), (40, 130, 50), dtype=np.uint8)
+
+    # Orange-red ball: BGR (30, 80, 200) -> HSV approximately [12-16, 215, 200]
+    cv2.circle(prev_frame, (190, 190), 8, (30, 80, 200), -1)
+    cv2.circle(frame, (220, 220), 8, (30, 80, 200), -1)
+
+    cand = tracker.detect_color_motion_ball(
+        frame=frame,
+        prev_frame=prev_frame,
+        corridor=(100, 300, 100, 300),
+        ball_type="auto"
+    )
+    assert cand is not None, "Orange-red cricket ball must be detected"
+    cx, cy, r, conf = cand
+    assert pytest.approx(cx, abs=6.0) == 220.0
+    assert pytest.approx(cy, abs=6.0) == 220.0
+
+
+def test_stationary_noise_rejected_for_ballistic_flight():
+    """Verify chain scoring prioritizes fast ballistic delivery over long stationary spectator noise."""
+    import numpy as np
+    from velopath.tracker import PitchTracker
+
+    tracker = PitchTracker()
+    width, height = 3840, 2160
+
+    # Synthetic long spectator chain (30 frames, but only 30px total movement = 1px/frame)
+    spectator_chain = [
+        (f, 1650.0 + (f % 3), 1050.0 + (f % 2), 0.55, 20.0)
+        for f in range(10, 40)
+    ]
+
+    # Synthetic fast pitch flight chain (8 frames, 600px displacement = 75px/frame)
+    pitch_chain = [
+        (f, 1800.0 + (f - 45) * 60.0, 900.0 + (f - 45) * 45.0, 0.60, 25.0)
+        for f in range(45, 53)
+    ]
+
+    best = tracker._select_best_flight_chain(
+        [spectator_chain, pitch_chain],
+        width=width,
+        height=height,
+        total_frames=100,
+        perspective="behind_plate"
+    )
+    assert best == pitch_chain, "Ballistic pitch delivery must be chosen over stationary spectator noise"
+
+
