@@ -227,4 +227,77 @@ def test_link_points_into_chains_adaptive_gap():
     assert len(chains[0]) == 3
 
 
+def test_upward_motion_rejected_by_physics_guard():
+    """Verify upward batter swing or cloud drift is rejected by gravity constraint."""
+    from velopath.tracker import PitchTracker
+
+    tracker = PitchTracker()
+    width, height = 1920, 1080
+
+    # Upward swing into sky (y decreases from 700 to 200)
+    upward_noise = [
+        (f, 960.0 + (f - 20) * 5.0, 700.0 - (f - 20) * 35.0, 0.60, 15.0)
+        for f in range(20, 30)
+    ]
+    best = tracker._select_best_flight_chain(
+        [upward_noise],
+        width=width,
+        height=height,
+        total_frames=100,
+        perspective="behind_pitcher"
+    )
+    assert best is None, "Upward motion must be rejected by universal physics constraint"
+
+
+def test_behind_catcher_flight_chain_selected():
+    """Verify ball traveling from pitcher to plate is correctly selected over stationary noise."""
+    from velopath.tracker import PitchTracker
+
+    tracker = PitchTracker()
+    width, height = 3840, 2160
+
+    # Behind-catcher pitch: travels from pitcher (y ~ 500) forward to catcher (y ~ 1200)
+    pitch_chain = [
+        (f, 1800.0 + (f - 40) * 30.0, 600.0 + (f - 40) * 50.0, 0.70, 18.0)
+        for f in range(40, 52)
+    ]
+    # Stationary fielder/batter shuffling
+    noise_chain = [
+        (f, 600.0 + (f % 3), 1100.0 + (f % 2), 0.40, 20.0)
+        for f in range(10, 40)
+    ]
+
+    best = tracker._select_best_flight_chain(
+        [noise_chain, pitch_chain],
+        width=width,
+        height=height,
+        total_frames=120,
+        perspective="behind_catcher"
+    )
+    assert best == pitch_chain, "Behind-catcher forward pitch delivery must be selected"
+
+
+def test_no_pitch_detected_guard():
+    """Verify empty/stationary noise chains return None from flight chain selection."""
+    from velopath.tracker import PitchTracker
+
+    tracker = PitchTracker()
+    width, height = 1920, 1080
+
+    # Empty noise chains: slow camera drift or windup movement
+    drift_noise = [
+        (f, 500.0 + (f % 2), 500.0 + (f % 2), 0.3, 10.0)
+        for f in range(10, 20)
+    ]
+    best = tracker._select_best_flight_chain(
+        [drift_noise],
+        width=width,
+        height=height,
+        total_frames=100,
+        perspective="auto"
+    )
+    assert best is None, "Drift noise must return None to prevent hallucinated pitch"
+
+
+
 

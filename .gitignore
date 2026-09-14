@@ -41,3 +41,6 @@ plate_inspection_*.jpg
 # OS
 .DS_Store
 Thumbs.db
+
+# Presentations
+PPT/

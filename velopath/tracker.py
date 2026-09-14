@@ -188,8 +188,8 @@ class PitchTracker:
 
         hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
 
-        # 1. Optic-yellow / neon tennis / tape ball mask (bright and high saturation to reject foliage)
-        mask_yellow = cv2.inRange(hsv, (25, 90, 130), (38, 255, 255))
+        # 1. Optic-yellow / neon tennis / training ball mask (tolerant to motion blur and daylight)
+        mask_yellow = cv2.inRange(hsv, (20, 50, 60), (55, 255, 255))
 
         # 2. High-brightness white/light baseball mask (low saturation, high brightness)
         mask_white = cv2.inRange(hsv, (0, 0, 160), (180, 45, 255))
@@ -225,7 +225,7 @@ class PitchTracker:
         sqrt_scale = float(np.sqrt(scale))
         min_area = max(8, int(2.5 * sqrt_scale))
         max_area = int(min(25000.0, 2500.0 * scale))
-        min_r = max(2.0, 0.5 * sqrt_scale)
+        min_r = max(2.5, 0.8 * sqrt_scale)
         max_r = max(35.0, 18.0 * sqrt_scale)
 
         candidates = []
@@ -250,7 +250,8 @@ class PitchTracker:
                                 else:
                                     target_mid = 5.0 * sqrt_scale
                                     size_fit = 1.0 / (1.0 + abs(r - target_mid) / (1.0 * target_mid))
-                                score = min(1.0, circularity) * size_fit
+                                area_bonus = min(2.5, max(0.5, (area / (min_area * 3.5)) ** 0.5))
+                                score = min(1.0, circularity) * size_fit * area_bonus
                                 candidates.append((cx + roi_x1, cy + roi_y1, r, score))
 
         # Only evaluate noisy white baseball mask if no saturated colored candidates exist
@@ -271,7 +272,8 @@ class PitchTracker:
                                 else:
                                     target_mid = 5.0 * sqrt_scale
                                     size_fit = 1.0 / (1.0 + abs(r - target_mid) / (1.0 * target_mid))
-                                score = min(1.0, circularity) * size_fit
+                                area_bonus = min(2.5, max(0.5, (area / (min_area * 3.5)) ** 0.5))
+                                score = min(1.0, circularity) * size_fit * area_bonus
                                 candidates.append((cx + roi_x1, cy + roi_y1, r, score))
 
         if candidates:
@@ -318,7 +320,7 @@ class PitchTracker:
         # Perspective-aware spatial corridor (covers release to plate, filters sky/clouds)
         corridor_x1 = width * 0.05
         corridor_x2 = width * 0.95
-        corridor_y1 = height * 0.20 if (resolved_perspective == "behind_catcher" or not is_portrait) else height * 0.05
+        corridor_y1 = height * 0.15 if (resolved_perspective == "behind_catcher" or not is_portrait) else height * 0.05
         corridor_y2 = height * 0.95
 
         # 2. Coarse Candidate Scan across the video
@@ -422,17 +424,14 @@ class PitchTracker:
                     p1_y = p1[2] if isinstance(p1, tuple) else p1.y
                     p0_x = p0[1] if isinstance(p0, tuple) else p0.x
                     p1_x = p1[1] if isinstance(p1, tuple) else p1.x
+                    dx = p1_x - p0_x
                     dy = p1_y - p0_y
-                    # Pitcher is in mid-depth (y < 0.60*h), plate is in foreground (y > 0.52*h), forward descent
-                    if p0_y < (height * 0.60) and p1_y > (height * 0.52) and dy > (height * 0.08):
+                    # Pitcher is in mid-depth (y < 0.60*h) and central corridor (0.25*w to 0.75*w), plate is in foreground (y > 0.52*h)
+                    if (p0_y < (height * 0.60) and p1_y > (height * 0.52) and dy > (height * 0.08) 
+                            and abs(dx) < (width * 0.45) and (width * 0.25 <= p0_x <= width * 0.75)):
                         is_catcher_view = True
                         break
-            if is_catcher_view:
-                resolved_perspective = "behind_catcher"
-            elif is_portrait:
-                resolved_perspective = "behind_pitcher"
-            else:
-                resolved_perspective = "behind_pitcher"
+            resolved_perspective = "behind_catcher" if is_catcher_view else "behind_pitcher"
 
         best_chain = self._select_best_flight_chain(
             chains, width, height, total_frames, resolved_perspective, fps=fps
@@ -624,25 +623,21 @@ class PitchTracker:
                 if trim_idx is not None and trim_idx >= 3:
                     detected_points = detected_points[:trim_idx]
 
-        # 4. Trajectory Completion: Ballistic Fitting or Perspective Arc
+        # 4. Trajectory Completion: Ballistic Fitting or No-Pitch Return
         if len(detected_points) >= 2:
             # We have real measured detections! Extrapolate ballistic flight
             detected_points = self._extrapolate_measured_flight(
                 detected_points, resolved_perspective, width, height, fps
             )
-        else:
-            # Complete absence of ball: synthesize arc for camera perspective
-            detected_points = self._synthesize_pitch_arc(
-                pitch_start, pitch_end, width, height, fps, resolved_perspective
-            )
-
-        start_f = detected_points[0].frame_idx
-        end_f = detected_points[-1].frame_idx
-        full_trajectory = interpolate_missing_frames(detected_points, start_f, end_f)
-        smoothed = smooth_trajectory(full_trajectory)
+            start_f = detected_points[0].frame_idx
+            end_f = detected_points[-1].frame_idx
+            full_trajectory = interpolate_missing_frames(detected_points, start_f, end_f)
+            smoothed = smooth_trajectory(full_trajectory)
+            self.last_resolved_perspective = resolved_perspective
+            return smoothed, fps, (width, height)
 
         self.last_resolved_perspective = resolved_perspective
-        return smoothed, fps, (width, height)
+        return [], fps, (width, height)
 
     def _link_points_into_chains(
         self,
@@ -779,14 +774,27 @@ class PitchTracker:
                 if (s_dist / float(s_dt)) > max_step:
                     return 0.00001
 
+            # Universal physics constraint: Pitched balls drop or stay level; they cannot launch upwards into the sky
+            if dy < (-25.0 * (height / 1080.0)):
+                return 0.00001
+
+            # Side-view rejection: Model and ABS strike zones require tunnel perspectives (behind-catcher / broadcast)
+            if abs(dx) > (width * 0.35) and abs(dx) > (1.8 * max(1.0, abs(dy))):
+                return 0.00001
+
+            # Margin guard: pitches travel down the field tunnel, not locked to sideline edges
+            if (p0[1] > (width * 0.88) and p1[1] > (width * 0.88)) or (p0[1] < (width * 0.12) and p1[1] < (width * 0.12)):
+                return 0.00001
+
             # Directional physics constraints
             if perspective in ["behind_plate", "behind_catcher"]:
                 if dx < -15.0 * scale:
                     return 0.00001
-                if dy < (-25.0 * (height / 1080.0)):
-                    return 0.00001
                 # Reject chains that stay confined entirely within the pitcher mound without progressing
                 if p0[1] < (width * 0.50) and p1[1] < (width * 0.50) and p1[2] < (height * 0.70) and disp < (width * 0.20):
+                    return 0.00001
+            elif perspective == "behind_pitcher":
+                if disp < (width * 0.08):
                     return 0.00001
 
             # Path straightness
@@ -829,15 +837,15 @@ class PitchTracker:
         valid_scored = []
         for c in chains:
             sc = score_chain(c)
-            if sc > 0.001:
+            if sc > 0.05:
                 valid_scored.append((sc, c))
 
         if valid_scored:
             valid_scored.sort(key=lambda x: x[0], reverse=True)
             return valid_scored[0][1]
 
-        # If no chain satisfied all physical constraints, fallback to longest chain with len >= 2
-        return max(chains, key=len) if chains else None
+        # No chain satisfied physical ballistic constraints
+        return None
 
     def _extrapolate_measured_flight(
         self,
@@ -852,6 +860,18 @@ class PitchTracker:
             return points
 
         p_last = points[-1]
+        # Calculate terminal velocity vector from recent detected points
+        if len(points) >= 4:
+            p_ref = points[-4]
+        elif len(points) >= 2:
+            p_ref = points[0]
+        else:
+            p_ref = points[-1]
+
+        dt = max(1, p_last.frame_idx - p_ref.frame_idx)
+        vx = (p_last.x - p_ref.x) / float(dt)
+        vy = (p_last.y - p_ref.y) / float(dt)
+
         reached_plate = False
         if perspective in ["behind_plate", "behind_catcher"]:
             # In behind-catcher view, plate crossing requires reaching the plate/catcher region
@@ -869,18 +889,6 @@ class PitchTracker:
 
         if len(points) >= target_pts and reached_plate:
             return points
-
-        # Calculate terminal velocity vector from recent detected points
-        if len(points) >= 4:
-            p_ref = points[-4]
-        elif len(points) >= 2:
-            p_ref = points[0]
-        else:
-            p_ref = points[-1]
-
-        dt = max(1, p_last.frame_idx - p_ref.frame_idx)
-        vx = (p_last.x - p_ref.x) / float(dt)
-        vy = (p_last.y - p_ref.y) / float(dt)
 
         extrapolated = list(points)
         last_frame = p_last.frame_idx
@@ -921,7 +929,7 @@ class PitchTracker:
                 cur_y = last_y + vy * step + 0.5 * g_accel * (step ** 2)
 
             # Prevent out-of-bounds runaway
-            if cur_x > (width * 0.88) or cur_y > (height * 0.88) or cur_x < (width * 0.08) or cur_y < (height * 0.08):
+            if cur_x > (width * 0.95) or cur_y > (height * 0.92) or cur_x < (width * 0.05) or cur_y < (height * 0.05):
                 break
 
             extrapolated.append(

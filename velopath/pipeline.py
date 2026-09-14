@@ -92,22 +92,55 @@ def process_pitch_video(
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     cap.release()
 
-    # If no ball detected by model, perform optical motion fallback
-    if len(trajectory_points) < 5:
-        # Scan for fastest motion centroid arc in video
-        trajectory_points = _detect_motion_arc(input_video_path, total_frames, width, height)
-
     if not trajectory_points:
-        # Fallback default trajectory scaled dynamically to video duration and resolution
-        fps_val = fps or 30.0
-        flight_len = max(10, min(int(round(0.45 * fps_val)), max(10, total_frames - 2)))
-        start_f = max(0, min(int(total_frames * 0.25), total_frames - flight_len - 1)) if total_frames > flight_len else 0
-        end_f = min(total_frames - 1, start_f + flight_len)
-        span = max(1, end_f - start_f)
-        trajectory_points = [
-            TrajectoryPoint(frame_idx=f, x=width * 0.5, y=height * (0.30 + 0.35 * ((f - start_f) / span)))
-            for f in range(start_f, end_f + 1)
-        ]
+        # Clean No-Pitch handling (e.g. windup drill, truncated clip, or aborted take)
+        os.makedirs(os.path.dirname(os.path.abspath(output_video_path)), exist_ok=True)
+        out_w, out_h = renderer.render_complete_video(
+            input_video_path=input_video_path,
+            output_video_path=output_video_path,
+            trajectory_points=[],
+            velocity_mph=0.0,
+            vert_break_in=0.0,
+            horz_break_in=0.0,
+            strike_zone=None,
+            call_result=None,
+            pitch_number=pitch_number,
+            pitch_tag="No Pitch",
+            flight_time_ms=0.0,
+            show_strike_zone=False,
+            graphic_style=graphic_style,
+            trim_to_pitch=False,
+            hud_style=hud_style,
+            max_dimension=max_dimension,
+        )
+        return {
+            "pitch_number": pitch_number,
+            "velocity_mph": 0.0,
+            "velocity_kmh": 0.0,
+            "plate_velocity_mph": 0.0,
+            "plate_velocity_kmh": 0.0,
+            "flight_time_ms": 0.0,
+            "effective_distance_ft": distance_ft,
+            "coverage_fraction": 0.0,
+            "sport": "baseball",
+            "vert_break_in": 0.0,
+            "horz_break_in": 0.0,
+            "pitch_tag": "No Pitch",
+            "is_strike": False,
+            "call": "NO PITCH DETECTED",
+            "strike_zone": None,
+            "plate_crossing": None,
+            "graphic_style": graphic_style,
+            "ball_type": ball_type,
+            "perspective": perspective,
+            "release_frame": 0,
+            "plate_frame": 0,
+            "elapsed_frames": 0,
+            "fps": fps,
+            "video_resolution": {"width": out_w, "height": out_h},
+            "output_video_path": output_video_path,
+            "trajectory": []
+        }
 
     # Only trim if trajectory is excessively long (> 1.5 seconds)
     max_flight_frames = int(round(1.5 * fps))
