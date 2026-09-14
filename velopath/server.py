@@ -50,6 +50,12 @@ async def health_check():
     return {"status": "ok", "app": "VeloPath AI", "port": 8000}
 
 
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon():
+    """Silences browser favicon requests without 404 errors."""
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @app.get("/video_feed")
 async def legacy_video_feed():
     return RedirectResponse(url="/")

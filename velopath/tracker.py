@@ -127,6 +127,14 @@ class PitchTracker:
         except Exception as e:
             device_name = "CPU (Fallback)"
             print(f"[PitchTracker] Note on model manager: {e}")
+
+        if self.device == "cpu":
+            try:
+                import torch
+                if hasattr(torch, "set_num_threads"):
+                    torch.set_num_threads(os.cpu_count() or 4)
+            except Exception:
+                pass
                 
         if model_path and os.path.exists(model_path):
             try:
@@ -151,12 +159,34 @@ class PitchTracker:
         and size-fit scoring.
         Returns: (cx, cy, radius, confidence) or None.
         """
-        if frame is None:
+        if frame is None or prev_frame is None:
             return None
         h, w = frame.shape[:2]
         c_x1, c_x2, c_y1, c_y2 = corridor
+        roi_x1 = max(0, int(c_x1))
+        roi_x2 = min(w, int(c_x2))
+        roi_y1 = max(0, int(c_y1))
+        roi_y2 = min(h, int(c_y2))
+        if roi_x2 <= roi_x1 or roi_y2 <= roi_y1:
+            return None
 
-        hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+        roi = frame[roi_y1:roi_y2, roi_x1:roi_x2]
+        prev_roi = prev_frame[roi_y1:roi_y2, roi_x1:roi_x2]
+        prev_roi2 = prev_frame2[roi_y1:roi_y2, roi_x1:roi_x2] if prev_frame2 is not None else None
+
+        # Multi-frame motion difference inside corridor ROI
+        diff1 = cv2.absdiff(roi, prev_roi)
+        diff_gray1 = cv2.cvtColor(diff1, cv2.COLOR_BGR2GRAY)
+        _, diff_thresh1 = cv2.threshold(diff_gray1, 18, 255, cv2.THRESH_BINARY)
+        if prev_roi2 is not None:
+            diff2 = cv2.absdiff(roi, prev_roi2)
+            diff_gray2 = cv2.cvtColor(diff2, cv2.COLOR_BGR2GRAY)
+            _, diff_thresh2 = cv2.threshold(diff_gray2, 18, 255, cv2.THRESH_BINARY)
+            diff_thresh = cv2.bitwise_or(diff_thresh1, diff_thresh2)
+        else:
+            diff_thresh = diff_thresh1
+
+        hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
 
         # 1. Optic-yellow / neon tennis / tape ball mask (bright and high saturation to reject foliage)
         mask_yellow = cv2.inRange(hsv, (25, 90, 130), (38, 255, 255))
@@ -172,30 +202,6 @@ class PitchTracker:
 
         # 4. Hot Pink / Magenta cricket training ball mask
         mask_pink = cv2.inRange(hsv, (140, 30, 45), (178, 255, 255))
-
-        # Corridor mask
-        corridor_mask = np.zeros((h, w), dtype=np.uint8)
-        cv2.rectangle(
-            corridor_mask,
-            (int(max(0, c_x1)), int(max(0, c_y1))),
-            (int(min(w - 1, c_x2)), int(min(h - 1, c_y2))),
-            255, -1
-        )
-
-        # Multi-frame motion difference: resilient to dropped/duplicate frames
-        if prev_frame is not None:
-            diff1 = cv2.absdiff(frame, prev_frame)
-            diff_gray1 = cv2.cvtColor(diff1, cv2.COLOR_BGR2GRAY)
-            _, diff_thresh1 = cv2.threshold(diff_gray1, 18, 255, cv2.THRESH_BINARY)
-            if prev_frame2 is not None:
-                diff2 = cv2.absdiff(frame, prev_frame2)
-                diff_gray2 = cv2.cvtColor(diff2, cv2.COLOR_BGR2GRAY)
-                _, diff_thresh2 = cv2.threshold(diff_gray2, 18, 255, cv2.THRESH_BINARY)
-                diff_thresh = cv2.bitwise_or(diff_thresh1, diff_thresh2)
-            else:
-                diff_thresh = diff_thresh1
-        else:
-            return None
 
         # Build candidate masks based on ball_type
         if ball_type in ["pink", "pink_cricket", "training"]:
@@ -224,8 +230,7 @@ class PitchTracker:
 
         candidates = []
         for c_mask in colored_masks:
-            masked = cv2.bitwise_and(c_mask, corridor_mask)
-            masked = cv2.bitwise_and(masked, diff_thresh)
+            masked = cv2.bitwise_and(c_mask, diff_thresh)
 
             cnts, _ = cv2.findContours(masked, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
             for c in cnts:
@@ -246,12 +251,11 @@ class PitchTracker:
                                     target_mid = 5.0 * sqrt_scale
                                     size_fit = 1.0 / (1.0 + abs(r - target_mid) / (1.0 * target_mid))
                                 score = min(1.0, circularity) * size_fit
-                                candidates.append((cx, cy, r, score))
+                                candidates.append((cx + roi_x1, cy + roi_y1, r, score))
 
         # Only evaluate noisy white baseball mask if no saturated colored candidates exist
         if not candidates and allow_white:
-            masked = cv2.bitwise_and(mask_white, corridor_mask)
-            masked = cv2.bitwise_and(masked, diff_thresh)
+            masked = cv2.bitwise_and(mask_white, diff_thresh)
             cnts, _ = cv2.findContours(masked, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
             for c in cnts:
                 area = cv2.contourArea(c)
@@ -268,7 +272,7 @@ class PitchTracker:
                                     target_mid = 5.0 * sqrt_scale
                                     size_fit = 1.0 / (1.0 + abs(r - target_mid) / (1.0 * target_mid))
                                 score = min(1.0, circularity) * size_fit
-                                candidates.append((cx, cy, r, score))
+                                candidates.append((cx + roi_x1, cy + roi_y1, r, score))
 
         if candidates:
             best = max(candidates, key=lambda item: item[3])
@@ -347,39 +351,48 @@ class PitchTracker:
                 continue
 
             hit = None
-            # Pass 1: High-accuracy YOLO baseball model (primary detector)
-            if self.model:
-                try:
-                    crop = frame[crop_y1:crop_y2, crop_x1:crop_x2]
-                    res = self.model.predict(crop, conf=0.12, verbose=False, imgsz=384, device=self.device)
-                    yolo_cands = []
-                    for b in res[0].boxes:
-                        bx1, by1, bx2, by2 = b.xyxy[0].tolist()
-                        bcx = (bx1 + bx2) / 2.0 + crop_x1
-                        bcy = (by1 + by2) / 2.0 + crop_y1
-                        yolo_cands.append((f, bcx, bcy, float(b.conf[0]), bx2 - bx1))
-                    if yolo_cands:
-                        yolo_cands.sort(key=lambda x: x[3], reverse=True)
-                        hit = yolo_cands[0]
-                except Exception:
-                    pass
+            # Pass 1: Quick adaptive color + multi-frame motion differencing
+            cand = self.detect_color_motion_ball(
+                frame=frame,
+                prev_frame=prev_coarse_frame,
+                corridor=(corridor_x1, corridor_x2, corridor_y1, corridor_y2),
+                ball_type=ball_type,
+                prev_frame2=prev_coarse_frame2
+            )
+            if cand and (self.model is None or ball_type != "auto" or cand[3] >= (0.45 if ball_type != "baseball" else 0.58)):
+                hit = (f, cand[0], cand[1], cand[3], cand[2] * 2.0)
 
-            # Pass 2: Adaptive color + multi-frame motion differencing (fallback / colored ball boost)
-            if hit is None or ball_type in ["red", "pink", "yellow", "orange", "leather"]:
-                cand = self.detect_color_motion_ball(
-                    frame=frame,
-                    prev_frame=prev_coarse_frame,
-                    corridor=(corridor_x1, corridor_x2, corridor_y1, corridor_y2),
-                    ball_type=ball_type,
-                    prev_frame2=prev_coarse_frame2
-                )
-                if cand:
-                    if hit is None:
-                        # Accept motion candidate when YOLO found no hit
-                        if self.model is None or ball_type != "auto" or cand[3] >= 0.45:
-                            hit = (f, cand[0], cand[1], cand[3], cand[2] * 2.0)
-                    elif ball_type in ["red", "pink", "yellow", "orange", "leather"] and cand[3] > 0.58 and cand[3] > hit[3]:
-                        hit = (f, cand[0], cand[1], cand[3], cand[2] * 2.0)
+            # Pass 2: High-accuracy YOLO baseball model with motion pre-gate
+            if hit is None and self.model:
+                has_motion = True
+                if prev_coarse_frame is not None:
+                    c_small = cv2.resize(frame[crop_y1:crop_y2, crop_x1:crop_x2], (384, 192))
+                    p_small = cv2.resize(prev_coarse_frame[crop_y1:crop_y2, crop_x1:crop_x2], (384, 192))
+                    diff = cv2.absdiff(c_small, p_small)
+                    if int(np.max(diff)) < 15:
+                        has_motion = False
+
+                if has_motion:
+                    try:
+                        crop = frame[crop_y1:crop_y2, crop_x1:crop_x2]
+                        res = self.model.predict(crop, conf=0.12, verbose=False, imgsz=384, device=self.device)
+                        yolo_cands = []
+                        for b in res[0].boxes:
+                            bx1, by1, bx2, by2 = b.xyxy[0].tolist()
+                            bcx = (bx1 + bx2) / 2.0 + crop_x1
+                            bcy = (by1 + by2) / 2.0 + crop_y1
+                            yolo_cands.append((f, bcx, bcy, float(b.conf[0]), bx2 - bx1))
+                        if yolo_cands:
+                            yolo_cands.sort(key=lambda x: x[3], reverse=True)
+                            hit = yolo_cands[0]
+                    except Exception:
+                        pass
+
+            # Fallback to color/motion candidate if YOLO found nothing
+            if hit is None and cand and cand[3] >= 0.45:
+                hit = (f, cand[0], cand[1], cand[3], cand[2] * 2.0)
+            elif hit is not None and cand and ball_type in ["red", "pink", "yellow", "orange", "leather"] and cand[3] > 0.58 and cand[3] > hit[3]:
+                hit = (f, cand[0], cand[1], cand[3], cand[2] * 2.0)
 
             if hit:
                 # Discard hits in upper sky for ground-level camera setups
@@ -462,50 +475,77 @@ class PitchTracker:
 
                 pt_found = None
 
-                # Pass A: High-res YOLO Detection on Corridor Crop (Primary)
-                if self.model and (curr_frame % frame_stride == 0):
-                    try:
-                        crop = frame[crop_y1:crop_y2, crop_x1:crop_x2]
-                        res = self.model.predict(crop, conf=conf_thresh, verbose=False, imgsz=480, device=self.device)
-                        if len(res[0].boxes) > 0:
-                            valid_boxes = []
-                            for b in res[0].boxes:
-                                bx1, by1, bx2, by2 = b.xyxy[0].tolist()
-                                bcx = (bx1 + bx2) / 2.0 + crop_x1
-                                bcy = (by1 + by2) / 2.0 + crop_y1
-                                valid_boxes.append((b, bcx, bcy, float(b.conf[0]), bx2 - bx1))
-                            if valid_boxes:
-                                valid_boxes.sort(key=lambda item: item[3], reverse=True)
-                                b_obj, cx, cy, c_conf, sz = valid_boxes[0]
-                                pt_found = TrajectoryPoint(
-                                    frame_idx=curr_frame,
-                                    x=cx,
-                                    y=cy,
-                                    conf=c_conf,
-                                    radius=max(4.0, sz / 2.0)
-                                )
-                    except Exception:
-                        pass
-
-                # Pass B: Adaptive Color + Multi-frame Motion Filter (Fallback / Colored Ball Boost)
-                if pt_found is None or ball_type in ["red", "pink", "yellow", "orange", "leather"]:
-                    color_cand = self.detect_color_motion_ball(
-                        frame=frame,
-                        prev_frame=prev_frame,
-                        corridor=(corridor_x1, corridor_x2, corridor_y1, corridor_y2),
-                        ball_type=ball_type,
-                        prev_frame2=prev_frame2
+                # Pass A: Quick adaptive color + multi-frame motion differencing
+                color_cand = self.detect_color_motion_ball(
+                    frame=frame,
+                    prev_frame=prev_frame,
+                    corridor=(corridor_x1, corridor_x2, corridor_y1, corridor_y2),
+                    ball_type=ball_type,
+                    prev_frame2=prev_frame2
+                )
+                if color_cand and (self.model is None or ball_type != "auto" or color_cand[3] >= (0.45 if ball_type != "baseball" else 0.58)):
+                    cx, cy, r, c_conf = color_cand
+                    pt_found = TrajectoryPoint(
+                        frame_idx=curr_frame,
+                        x=cx,
+                        y=cy,
+                        conf=c_conf,
+                        radius=max(4.0, r)
                     )
-                    if color_cand:
-                        if pt_found is None or (color_cand[3] > 0.65 and color_cand[3] > pt_found.conf):
-                            cx, cy, r, c_conf = color_cand
-                            pt_found = TrajectoryPoint(
-                                frame_idx=curr_frame,
-                                x=cx,
-                                y=cy,
-                                conf=c_conf,
-                                radius=max(4.0, r)
-                            )
+
+                # Pass B: High-accuracy YOLO baseball model (with motion pre-gate)
+                if pt_found is None and self.model and (curr_frame % frame_stride == 0):
+                    has_motion = True
+                    if prev_frame is not None:
+                        c_small = cv2.resize(frame[crop_y1:crop_y2, crop_x1:crop_x2], (384, 192))
+                        p_small = cv2.resize(prev_frame[crop_y1:crop_y2, crop_x1:crop_x2], (384, 192))
+                        diff = cv2.absdiff(c_small, p_small)
+                        if int(np.max(diff)) < 15:
+                            has_motion = False
+
+                    if has_motion:
+                        try:
+                            crop = frame[crop_y1:crop_y2, crop_x1:crop_x2]
+                            res = self.model.predict(crop, conf=conf_thresh, verbose=False, imgsz=384, device=self.device)
+                            if len(res[0].boxes) > 0:
+                                valid_boxes = []
+                                for b in res[0].boxes:
+                                    bx1, by1, bx2, by2 = b.xyxy[0].tolist()
+                                    bcx = (bx1 + bx2) / 2.0 + crop_x1
+                                    bcy = (by1 + by2) / 2.0 + crop_y1
+                                    valid_boxes.append((b, bcx, bcy, float(b.conf[0]), bx2 - bx1))
+                                if valid_boxes:
+                                    valid_boxes.sort(key=lambda item: item[3], reverse=True)
+                                    b_obj, cx, cy, c_conf, sz = valid_boxes[0]
+                                    pt_found = TrajectoryPoint(
+                                        frame_idx=curr_frame,
+                                        x=cx,
+                                        y=cy,
+                                        conf=c_conf,
+                                        radius=max(4.0, sz / 2.0)
+                                    )
+                        except Exception:
+                            pass
+
+                # Fallback to color/motion candidate if YOLO found nothing
+                if pt_found is None and color_cand and color_cand[3] >= 0.45:
+                    cx, cy, r, c_conf = color_cand
+                    pt_found = TrajectoryPoint(
+                        frame_idx=curr_frame,
+                        x=cx,
+                        y=cy,
+                        conf=c_conf,
+                        radius=max(4.0, r)
+                    )
+                elif pt_found is not None and color_cand and ball_type in ["red", "pink", "yellow", "orange", "leather"] and color_cand[3] > 0.65 and color_cand[3] > pt_found.conf:
+                    cx, cy, r, c_conf = color_cand
+                    pt_found = TrajectoryPoint(
+                        frame_idx=curr_frame,
+                        x=cx,
+                        y=cy,
+                        conf=c_conf,
+                        radius=max(4.0, r)
+                    )
 
                 if pt_found:
                     fine_detected.append(pt_found)

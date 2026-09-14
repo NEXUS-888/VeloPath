@@ -67,6 +67,7 @@ def process_pitch_video(
     perspective: str = "auto",
     trim_to_pitch: bool = True,
     hud_style: str = "none",
+    max_dimension: Optional[int] = 1920,
 ) -> Dict[str, Any]:
     """
     Complete end-to-end Pitch Lab analysis:
@@ -176,7 +177,7 @@ def process_pitch_video(
 
     # 5. Render final Pitch Lab video
     os.makedirs(os.path.dirname(os.path.abspath(output_video_path)), exist_ok=True)
-    renderer.render_complete_video(
+    out_w, out_h = renderer.render_complete_video(
         input_video_path=input_video_path,
         output_video_path=output_video_path,
         trajectory_points=trajectory_points,
@@ -192,7 +193,11 @@ def process_pitch_video(
         graphic_style=graphic_style,
         trim_to_pitch=trim_to_pitch,
         hud_style=hud_style,
+        max_dimension=max_dimension,
     )
+
+    scale_x = out_w / float(width) if width > 0 else 1.0
+    scale_y = out_h / float(height) if height > 0 else 1.0
 
     return {
         "pitch_number": pitch_number,
@@ -210,14 +215,14 @@ def process_pitch_video(
         "is_strike": call_result.is_strike,
         "call": call_result.call,
         "strike_zone": {
-            "x_min": round(strike_zone.x_min, 1),
-            "y_min": round(strike_zone.y_min, 1),
-            "x_max": round(strike_zone.x_max, 1),
-            "y_max": round(strike_zone.y_max, 1),
+            "x_min": round(strike_zone.x_min * scale_x, 1),
+            "y_min": round(strike_zone.y_min * scale_y, 1),
+            "x_max": round(strike_zone.x_max * scale_x, 1),
+            "y_max": round(strike_zone.y_max * scale_y, 1),
         },
         "plate_crossing": {
-            "x": round(plate_pt[0], 1),
-            "y": round(plate_pt[1], 1),
+            "x": round(plate_pt[0] * scale_x, 1),
+            "y": round(plate_pt[1] * scale_y, 1),
         },
         "graphic_style": graphic_style,
         "ball_type": ball_type,
@@ -226,10 +231,10 @@ def process_pitch_video(
         "plate_frame": plate_frame,
         "elapsed_frames": elapsed_frames,
         "fps": fps,
-        "video_resolution": {"width": width, "height": height},
+        "video_resolution": {"width": out_w, "height": out_h},
         "output_video_path": output_video_path,
         "trajectory": [
-            {"frame": p.frame_idx, "x": round(p.x, 1), "y": round(p.y, 1)}
+            {"frame": p.frame_idx, "x": round(p.x * scale_x, 1), "y": round(p.y * scale_y, 1)}
             for p in trajectory_points
         ]
     }
@@ -303,6 +308,7 @@ def rerender_pitch(
     perspective: str = "auto",
     trim_to_pitch: bool = True,
     hud_style: str = "none",
+    max_dimension: Optional[int] = 1920,
 ) -> dict:
     """
     Fast re-render using existing tracked trajectory and updated strike zone or graphic theme.
@@ -359,7 +365,7 @@ def rerender_pitch(
     )
 
     renderer = PitchRenderer(graphic_style=graphic_style)
-    renderer.render_complete_video(
+    out_w, out_h = renderer.render_complete_video(
         input_video_path=input_video_path,
         output_video_path=output_video_path,
         trajectory_points=pts,
@@ -375,6 +381,7 @@ def rerender_pitch(
         graphic_style=graphic_style,
         trim_to_pitch=trim_to_pitch,
         hud_style=hud_style,
+        max_dimension=max_dimension,
     )
 
     return {
@@ -409,7 +416,7 @@ def rerender_pitch(
         "plate_frame": plate_frame,
         "elapsed_frames": elapsed_frames,
         "fps": fps,
-        "video_resolution": {"width": width, "height": height},
+        "video_resolution": {"width": out_w, "height": out_h},
         "output_video_path": output_video_path,
         "trajectory": trajectory,
     }
