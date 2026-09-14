@@ -5,12 +5,14 @@ from typing import Optional
 import os
 import shutil
 import uuid
-from fastapi import FastAPI, File, UploadFile, Form, HTTPException, Request, status
-from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, StreamingResponse
+import json
+from fastapi import FastAPI, File, UploadFile, Form, HTTPException, Request, Response, status
+from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, StreamingResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 
-from velopath.pipeline import process_pitch_video
+from velopath.pipeline import process_pitch_video, rerender_pitch
 
 app = FastAPI(title="VeloPath AI", version="1.0.0")
 
@@ -50,11 +52,7 @@ async def health_check():
 
 @app.get("/video_feed")
 async def legacy_video_feed():
-    from fastapi.responses import RedirectResponse
     return RedirectResponse(url="/")
-
-
-_SAMPLE_CACHE = None
 
 
 @app.get("/api/sample")
@@ -66,7 +64,6 @@ async def process_sample_pitch():
     if os.path.exists(meta_file) and os.path.exists(out_file):
         try:
             with open(meta_file, "r", encoding="utf-8") as f:
-                import json
                 return JSONResponse(json.load(f))
         except Exception:
             pass
@@ -84,17 +81,11 @@ async def process_sample_pitch():
     )
     result["video_url"] = "/api/video/velopath_sample_result.mp4"
     try:
-        import json
         with open(meta_file, "w", encoding="utf-8") as f:
             json.dump(result, f, indent=2)
     except Exception:
         pass
     return JSONResponse(result)
-
-
-import json
-from pydantic import BaseModel
-from velopath.pipeline import process_pitch_video, rerender_pitch
 
 
 class RerenderPayload(BaseModel):
@@ -211,15 +202,40 @@ async def stream_video(filename: str, request: Request):
     file_size = os.path.getsize(file_path)
     range_header = request.headers.get("range")
 
-    if not range_header:
+    if not range_header or not range_header.startswith("bytes="):
         return FileResponse(file_path, media_type="video/mp4")
 
-    # Parse range header: e.g. "bytes=0-1024"
-    byte_range = range_header.replace("bytes=", "").split("-")
-    start = int(byte_range[0])
-    end = int(byte_range[1]) if byte_range[1] else file_size - 1
+    # Parse RFC 7233 byte-range: e.g. "bytes=0-1024", "bytes=500-", "bytes=-500"
+    try:
+        raw_range = range_header.replace("bytes=", "").strip()
+        parts = raw_range.split("-")
+        if not parts[0]:  # Suffix range: bytes=-500
+            suffix = int(parts[1])
+            start = max(0, file_size - suffix)
+            end = file_size - 1
+        else:
+            start = int(parts[0])
+            end = int(parts[1]) if parts[1] else file_size - 1
+
+        end = min(end, file_size - 1)
+        if start > end or start >= file_size:
+            return Response(
+                status_code=status.HTTP_416_RANGE_NOT_SATISFIABLE,
+                headers={"Content-Range": f"bytes */{file_size}"}
+            )
+    except (ValueError, IndexError):
+        return FileResponse(file_path, media_type="video/mp4")
 
     chunk_size = (end - start) + 1
+    headers = {
+        "Content-Range": f"bytes {start}-{end}/{file_size}",
+        "Accept-Ranges": "bytes",
+        "Content-Length": str(chunk_size),
+        "Content-Type": "video/mp4",
+    }
+
+    if request.method == "HEAD":
+        return Response(status_code=status.HTTP_206_PARTIAL_CONTENT, headers=headers)
 
     def iterfile():
         with open(file_path, "rb") as f:
@@ -233,12 +249,6 @@ async def stream_video(filename: str, request: Request):
                 bytes_left -= len(data)
                 yield data
 
-    headers = {
-        "Content-Range": f"bytes {start}-{end}/{file_size}",
-        "Accept-Ranges": "bytes",
-        "Content-Length": str(chunk_size),
-        "Content-Type": "video/mp4",
-    }
     return StreamingResponse(iterfile(), status_code=status.HTTP_206_PARTIAL_CONTENT, headers=headers)
 
 

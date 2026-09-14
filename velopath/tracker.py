@@ -522,7 +522,7 @@ class PitchTracker:
 
         # Fine Chain Clustering with physical velocity gating
         f_chains = self._link_points_into_chains(
-            fine_detected, width, height, resolved_perspective, max_dt=6
+            fine_detected, width, height, resolved_perspective, max_dt=max(8, frame_stride * 4)
         )
         best_fine = self._select_best_flight_chain(
             f_chains, width, height, total_frames, resolved_perspective, fps=fps
@@ -859,6 +859,8 @@ class PitchTracker:
                 vy = max(vy, 10.0 * scale_y)
             elif perspective == "behind_pitcher":
                 max_extrap_steps = max(max_extrap_steps, 20)
+                if abs(vy) < 0.1:
+                    vy = 6.0 * scale_y
 
         cur_x = last_x
         cur_y = last_y

@@ -97,10 +97,15 @@ def process_pitch_video(
         trajectory_points = _detect_motion_arc(input_video_path, total_frames, width, height)
 
     if not trajectory_points:
-        # Fallback default trajectory in case of static video
+        # Fallback default trajectory scaled dynamically to video duration and resolution
+        fps_val = fps or 30.0
+        flight_len = max(10, min(int(round(0.45 * fps_val)), max(10, total_frames - 2)))
+        start_f = max(0, min(int(total_frames * 0.25), total_frames - flight_len - 1)) if total_frames > flight_len else 0
+        end_f = min(total_frames - 1, start_f + flight_len)
+        span = max(1, end_f - start_f)
         trajectory_points = [
-            TrajectoryPoint(frame_idx=f, x=width*0.5, y=height*(0.3 + 0.005*(f-150)))
-            for f in range(150, 210)
+            TrajectoryPoint(frame_idx=f, x=width * 0.5, y=height * (0.30 + 0.35 * ((f - start_f) / span)))
+            for f in range(start_f, end_f + 1)
         ]
 
     # Only trim if trajectory is excessively long (> 1.5 seconds)
@@ -257,17 +262,22 @@ def _detect_motion_arc(
             _, thresh = cv2.threshold(diff, 28, 255, cv2.THRESH_BINARY)
             contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
             
-            # Filter contours by small circular ball size
+            # Filter contours by small circular ball size scaled to resolution
+            scale_area = max(0.5, (width * height) / (1280.0 * 720.0))
             candidates = []
             for c in contours:
                 area = cv2.contourArea(c)
-                if 20 <= area <= 600:
+                if (15.0 * scale_area) <= area <= (1200.0 * scale_area):
                     (x, y), radius = cv2.minEnclosingCircle(c)
                     candidates.append((x, y, radius, area))
 
             if candidates:
-                # Pick best candidate closest to previous motion
-                best = max(candidates, key=lambda c: c[3])
+                # Pick candidate closest to previous motion point if available
+                if motion_pts:
+                    last_pt = motion_pts[-1]
+                    best = min(candidates, key=lambda c: (c[0] - last_pt.x)**2 + (c[1] - last_pt.y)**2)
+                else:
+                    best = max(candidates, key=lambda c: c[3])
                 motion_pts.append(
                     TrajectoryPoint(frame_idx=f_idx, x=float(best[0]), y=float(best[1]), conf=0.7)
                 )

@@ -190,3 +190,41 @@ def test_stationary_noise_rejected_for_ballistic_flight():
     assert best == pitch_chain, "Ballistic pitch delivery must be chosen over stationary spectator noise"
 
 
+def test_extrapolate_single_point_behind_pitcher():
+    """Verify single point detection provides forward velocity rather than static stall."""
+    from velopath.tracker import PitchTracker
+
+    tracker = PitchTracker()
+    single_point = [TrajectoryPoint(frame_idx=10, x=500.0, y=300.0, conf=0.8)]
+    extrapolated = tracker._extrapolate_measured_flight(
+        points=single_point,
+        perspective="behind_pitcher",
+        width=1000,
+        height=1000,
+        fps=30.0
+    )
+    assert len(extrapolated) > 1
+    # Ball should progress downward/forward toward target
+    assert extrapolated[-1].y > single_point[0].y
+    assert extrapolated[-1].frame_idx > single_point[0].frame_idx
+
+
+def test_link_points_into_chains_adaptive_gap():
+    """Verify points with frame gap up to max_dt are linked into a single continuous chain."""
+    from velopath.tracker import PitchTracker
+
+    tracker = PitchTracker()
+    # Points with a 5-frame gap (e.g. frame 10 and 15)
+    pts = [
+        TrajectoryPoint(frame_idx=10, x=500.0, y=300.0, conf=0.8),
+        TrajectoryPoint(frame_idx=15, x=520.0, y=350.0, conf=0.8),
+        TrajectoryPoint(frame_idx=16, x=525.0, y=360.0, conf=0.8),
+    ]
+    chains = tracker._link_points_into_chains(
+        pts, width=1280, height=720, perspective="behind_pitcher", max_dt=8
+    )
+    assert len(chains) == 1
+    assert len(chains[0]) == 3
+
+
+

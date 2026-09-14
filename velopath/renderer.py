@@ -78,23 +78,15 @@ class PitchRenderer:
         """
         if frame is None:
             return frame
-        active_points = [p for p in points if p.frame_idx <= current_frame_idx]
-        if len(active_points) < 2:
-            return frame
-
-        h, w = frame.shape[:2]
-
-        # Unique points sorted by frame
-        unique_pts = []
-        seen = set()
+        frame_map = {}
         for p in points:
-            if p.frame_idx not in seen and p.frame_idx <= current_frame_idx:
-                seen.add(p.frame_idx)
-                unique_pts.append(p)
-        unique_pts.sort(key=lambda p: p.frame_idx)
-
-        if len(unique_pts) < 2:
+            if p.frame_idx <= current_frame_idx and (p.frame_idx not in frame_map or p.conf >= frame_map[p.frame_idx].conf):
+                frame_map[p.frame_idx] = p
+        if len(frame_map) < 2:
             return frame
+
+        unique_pts = [frame_map[f] for f in sorted(frame_map.keys())]
+        h, w = frame.shape[:2]
 
         frames = np.array([p.frame_idx for p in unique_pts], dtype=float)
         xs = np.array([p.x for p in unique_pts], dtype=float)
