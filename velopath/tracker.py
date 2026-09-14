@@ -613,11 +613,12 @@ class PitchTracker:
                 for i in range(len(detected_points) - 1):
                     p_curr = detected_points[i]
                     p_next = detected_points[i + 1]
-                    if p_curr.y >= (height * 0.60) or p_curr.x >= (width * 0.68):
+                    if p_curr.y >= (height * 0.55) or p_curr.x >= (width * 0.62):
                         dt = max(1, p_next.frame_idx - p_curr.frame_idx)
                         speed = np.hypot(p_next.x - p_curr.x, p_next.y - p_curr.y) / float(dt)
                         dy = p_next.y - p_curr.y
-                        if dy < (-10.0 * (height / 1080.0)) or (speed < 4.0 * scale_val and dt >= 2):
+                        dx = p_next.x - p_curr.x
+                        if dy < (-10.0 * (height / 1080.0)) or (dy > (14.0 * (height / 720.0)) and dy > 1.8 * abs(dx)) or (speed < 4.0 * scale_val and dt >= 2):
                             trim_idx = i + 1
                             break
                 if trim_idx is not None and trim_idx >= 3:
@@ -854,7 +855,7 @@ class PitchTracker:
         reached_plate = False
         if perspective in ["behind_plate", "behind_catcher"]:
             # In behind-catcher view, plate crossing requires reaching the plate/catcher region
-            if (p_last.x >= (width * 0.70) and p_last.y >= (height * 0.60)) or p_last.x >= (width * 0.76) or p_last.y >= (height * 0.74):
+            if (p_last.x >= (width * 0.62) and p_last.y >= (height * 0.38)) or p_last.x >= (width * 0.72) or p_last.y >= (height * 0.70):
                 reached_plate = True
         elif perspective == "behind_pitcher":
             if p_last.y >= (height * 0.70):
