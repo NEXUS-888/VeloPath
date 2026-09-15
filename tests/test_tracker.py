@@ -249,6 +249,22 @@ def test_upward_motion_rejected_by_physics_guard():
     assert best is None, "Upward motion into the sky must be rejected in behind-catcher view"
 
 
+def test_lateral_motion_is_not_a_pitch():
+    """A moving object must progress toward the plate, not merely cross the frame."""
+    from velopath.tracker import PitchTracker
+
+    tracker = PitchTracker()
+    lateral_noise = [
+        (f, 30.0 + (f - 10) * 12.0, 740.0, 0.65, 12.0)
+        for f in range(10, 18)
+    ]
+
+    assert tracker._select_best_flight_chain(
+        [lateral_noise], width=384, height=848, total_frames=180,
+        perspective="auto", fps=60.0,
+    ) is None
+
+
 def test_behind_pitcher_flight_chain_selected():
     """Verify ball traveling from foreground pitcher to distance plate (dy < 0) is selected in behind-pitcher view."""
     from velopath.tracker import PitchTracker

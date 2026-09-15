@@ -334,7 +334,20 @@ document.addEventListener('DOMContentLoaded', () => {
         updateCallState(isStrike);
     }
 
-    function updateCallState(isStrike) {
+    function updateCallState(isStrike, pitchDetected = true) {
+        if (!pitchDetected) {
+            const text = 'NO PITCH';
+            sideCallBadge.textContent = text;
+            sideCallBadge.className = 'text-xs font-black uppercase px-2.5 py-0.5 rounded-md bg-slate-500/20 text-slate-300 border border-slate-500/40';
+            sideZoneCallStatus.textContent = text;
+            sideZoneCallStatus.className = 'font-black text-slate-300 uppercase text-[11px]';
+            dockCallStatus.textContent = text;
+            dockCallStatus.className = 'text-[10px] font-black px-2 py-0.5 rounded uppercase bg-slate-500/20 text-slate-300 border border-slate-500/30';
+            interactiveZoneBox.classList.remove('is-strike', 'is-ball');
+            overlayCallText.textContent = text;
+            overlayCallText.className = 'text-xs font-black tracking-wider uppercase px-2 py-0.5 rounded bg-slate-500/20 text-slate-300 border border-slate-500/40';
+            return;
+        }
         const text = isStrike ? 'STRIKE' : 'BALL';
         
         // Sidebar Badge
@@ -592,7 +605,8 @@ document.addEventListener('DOMContentLoaded', () => {
         vertBreakVal.textContent = (data.vert_break_in >= 0 ? '+' : '') + data.vert_break_in.toFixed(1);
         horzBreakVal.textContent = (data.horz_break_in >= 0 ? '+' : '') + data.horz_break_in.toFixed(1);
         
-        const tag = data.pitch_tag || 'Fastball';
+        const pitchDetected = data.pitch_detected ?? Boolean(data.trajectory?.length);
+        const tag = pitchDetected ? (data.pitch_tag || 'Pitch') : 'No Pitch';
         sidePitchType.textContent = tag;
 
         // On-Video Glassmorphism Overlay
@@ -606,7 +620,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         // Call State
-        updateCallState(data.is_strike);
+        updateCallState(data.is_strike, pitchDetected);
 
         // Synchronize Strike Zone
         if (data.strike_zone) {
@@ -630,8 +644,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 15. Fast Re-Render (~1s) on Strike Zone or Visual Change
     async function applyStrikeZoneChanges() {
-        if (!currentPitchData || !currentPitchData.trajectory) {
-            alert('Please load or upload a pitch video first.');
+        if (!currentPitchData?.trajectory?.length) {
+            alert('A verified pitch is required before calibrating the strike zone.');
             return;
         }
 

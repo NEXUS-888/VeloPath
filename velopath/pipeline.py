@@ -114,6 +114,7 @@ def process_pitch_video(
             max_dimension=max_dimension,
         )
         return {
+            "pitch_detected": False,
             "pitch_number": pitch_number,
             "velocity_mph": 0.0,
             "velocity_kmh": 0.0,
@@ -166,9 +167,8 @@ def process_pitch_video(
         )
     else:
         resolved_perspective = getattr(tracker, "last_resolved_perspective", None) or perspective
-        plate_pt_hint = (trajectory_points[-1].x, trajectory_points[-1].y) if trajectory_points else None
         strike_zone = StrikeZone.get_preset_zone(
-            width, height, view_type=resolved_perspective, plate_point=plate_pt_hint
+            width, height, view_type=resolved_perspective
         )
 
     # 3. Physically Grounded Timing & Aerodynamic Velocity
@@ -233,6 +233,7 @@ def process_pitch_video(
     scale_y = out_h / float(height) if height > 0 else 1.0
 
     return {
+        "pitch_detected": True,
         "pitch_number": pitch_number,
         "velocity_mph": velocity_mph,
         "velocity_kmh": velocity_kmh,

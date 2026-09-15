@@ -606,12 +606,9 @@ class PitchTracker:
                 if trim_idx is not None and trim_idx >= 3:
                     detected_points = detected_points[:trim_idx]
 
-        # 4. Trajectory Completion: Ballistic Fitting or No-Pitch Return
-        if len(detected_points) >= 2:
-            # We have real measured detections! Extrapolate ballistic flight
-            detected_points = self._extrapolate_measured_flight(
-                detected_points, resolved_perspective, width, height, fps
-            )
+        # 4. Return only observed ball positions (and interpolation between them).
+        # Predicted tails are not tracking evidence and must not turn noise into a pitch.
+        if len(detected_points) >= 3:
             start_f = detected_points[0].frame_idx
             end_f = detected_points[-1].frame_idx
             full_trajectory = interpolate_missing_frames(detected_points, start_f, end_f)
@@ -757,18 +754,20 @@ class PitchTracker:
             # Perspective-specific directional physics constraints
             if perspective in ["behind_plate", "behind_catcher"]:
                 # In behind-catcher view: ball travels from pitcher toward catcher/camera (dy > 0)
-                if dy < (-25.0 * (height / 1080.0)):
+                min_forward_y = max(8.0 * scale, height * 0.035)
+                if dy < min_forward_y:
                     return 0.00001
-                if dx < -15.0 * scale:
+                if abs(dx) > max(width * 0.35, abs(dy) * 2.0):
                     return 0.00001
                 # Reject chains confined entirely to mound without progressing forward
                 if p0[1] < (width * 0.50) and p1[1] < (width * 0.50) and p1[2] < (height * 0.70) and disp < (width * 0.20):
                     return 0.00001
             elif perspective in ["behind_pitcher", "broadcast"]:
                 # In behind-pitcher view: ball travels away from camera toward home plate in distance (dy < 0)
-                if dy > (25.0 * (height / 1080.0)):
+                min_forward_y = max(8.0 * scale, height * 0.035)
+                if dy > -min_forward_y:
                     return 0.00001
-                if disp < (width * 0.08):
+                if abs(dx) > max(width * 0.35, abs(dy) * 2.0) or disp < (width * 0.08):
                     return 0.00001
 
             # Path straightness
