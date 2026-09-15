@@ -79,6 +79,9 @@ def process_pitch_video(
     if not os.path.exists(input_video_path):
         raise FileNotFoundError(f"Video file not found: {input_video_path}")
 
+    is_normal_mode = (mode or "baseball").lower().strip() in ["normal", "general"] or (perspective or "").lower().strip() in ["normal", "general"]
+    show_strike_zone = not is_normal_mode
+
     tracker = PitchTracker()
     renderer = PitchRenderer(graphic_style=graphic_style)
 
@@ -118,6 +121,8 @@ def process_pitch_video(
         )
         return {
             "pitch_detected": False,
+            "mode": "normal" if is_normal_mode else "baseball",
+            "show_strike_zone": show_strike_zone,
             "pitch_number": pitch_number,
             "velocity_mph": 0.0,
             "velocity_kmh": 0.0,
