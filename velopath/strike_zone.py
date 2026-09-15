@@ -65,13 +65,13 @@ class StrikeZone:
         is_portrait = height > width
         aspect = width / float(height)
 
-        # 1. Dynamic anchoring if home plate crossing point is known (used for perspectives without fixed home plate ground cameras)
+        # 1. Dynamic anchoring if home plate crossing point is known
         if plate_point is not None and view_type not in ["behind_plate", "behind_catcher"]:
             px, py = plate_point
             if (width * 0.05) <= px <= (width * 0.95) and (height * 0.05) <= py <= (height * 0.95):
                 if view_type == "behind_pitcher":
-                    zw = width * 0.14
-                    zh = height * 0.18
+                    zw = width * (0.20 if is_portrait else 0.14)
+                    zh = height * (0.14 if is_portrait else 0.18)
                     cx = px
                     cy = max(zh / 2.0, py - zh * 0.35)
                     return cls(
@@ -105,10 +105,10 @@ class StrikeZone:
                 y_max=cy + (zh / 2.0)
             )
         elif view_type == "behind_pitcher":
-            cx = width * 0.65 if aspect > 1.3 else width * 0.50
-            cy = height * 0.54
-            zw = width * 0.14
-            zh = height * 0.18
+            cx = width * 0.50 if is_portrait else (width * 0.65 if aspect > 1.3 else width * 0.50)
+            cy = height * 0.48 if is_portrait else height * 0.54
+            zw = width * 0.20 if is_portrait else width * 0.14
+            zh = height * 0.14 if is_portrait else height * 0.18
             return cls(
                 x_min=cx - (zw / 2.0),
                 y_min=cy - (zh / 2.0),

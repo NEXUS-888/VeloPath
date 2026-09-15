@@ -446,7 +446,7 @@ class PitchRenderer:
         flight_time_ms: Optional[float] = None,
         show_strike_zone: bool = True,
         graphic_style: str = "statcast_cyan",
-        trim_to_pitch: bool = True,
+        trim_to_pitch: bool = False,
         hud_style: str = "none",
         max_dimension: Optional[int] = 1920,
     ) -> Tuple[int, int]:

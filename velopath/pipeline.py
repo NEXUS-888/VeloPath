@@ -65,7 +65,7 @@ def process_pitch_video(
     graphic_style: str = "statcast_cyan",
     ball_type: str = "auto",
     perspective: str = "auto",
-    trim_to_pitch: bool = True,
+    trim_to_pitch: bool = False,
     hud_style: str = "none",
     max_dimension: Optional[int] = 1920,
 ) -> Dict[str, Any]:
@@ -259,7 +259,7 @@ def process_pitch_video(
         },
         "graphic_style": graphic_style,
         "ball_type": ball_type,
-        "perspective": perspective,
+        "perspective": resolved_perspective,
         "release_frame": release_frame,
         "plate_frame": plate_frame,
         "elapsed_frames": elapsed_frames,
@@ -339,7 +339,7 @@ def rerender_pitch(
     pitch_number: int = 1,
     ball_type: str = "auto",
     perspective: str = "auto",
-    trim_to_pitch: bool = True,
+    trim_to_pitch: bool = False,
     hud_style: str = "none",
     max_dimension: Optional[int] = 1920,
 ) -> dict:

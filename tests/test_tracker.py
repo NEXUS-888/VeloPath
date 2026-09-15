@@ -228,13 +228,13 @@ def test_link_points_into_chains_adaptive_gap():
 
 
 def test_upward_motion_rejected_by_physics_guard():
-    """Verify upward batter swing or cloud drift is rejected by gravity constraint."""
+    """Verify upward batter swing or cloud drift is rejected in behind-catcher view."""
     from velopath.tracker import PitchTracker
 
     tracker = PitchTracker()
     width, height = 1920, 1080
 
-    # Upward swing into sky (y decreases from 700 to 200)
+    # Upward swing into sky (y decreases from 700 to 200 in behind_catcher view)
     upward_noise = [
         (f, 960.0 + (f - 20) * 5.0, 700.0 - (f - 20) * 35.0, 0.60, 15.0)
         for f in range(20, 30)
@@ -244,9 +244,37 @@ def test_upward_motion_rejected_by_physics_guard():
         width=width,
         height=height,
         total_frames=100,
+        perspective="behind_catcher"
+    )
+    assert best is None, "Upward motion into the sky must be rejected in behind-catcher view"
+
+
+def test_behind_pitcher_flight_chain_selected():
+    """Verify ball traveling from foreground pitcher to distance plate (dy < 0) is selected in behind-pitcher view."""
+    from velopath.tracker import PitchTracker
+
+    tracker = PitchTracker()
+    width, height = 1920, 1080
+
+    # Real pitch traveling away from camera toward home plate in distance (y from 800 to 450)
+    pitch_chain = [
+        (f, 960.0 + (f - 30) * 5.0, 800.0 - (f - 30) * 25.0, 0.70, 15.0)
+        for f in range(30, 44)
+    ]
+    # Stationary noise / spectator movement
+    noise_chain = [
+        (f, 400.0 + (f % 2), 600.0 + (f % 2), 0.40, 15.0)
+        for f in range(10, 40)
+    ]
+
+    best = tracker._select_best_flight_chain(
+        [noise_chain, pitch_chain],
+        width=width,
+        height=height,
+        total_frames=100,
         perspective="behind_pitcher"
     )
-    assert best is None, "Upward motion must be rejected by universal physics constraint"
+    assert best == pitch_chain, "Behind-pitcher pitch delivery towards plate must be selected"
 
 
 def test_behind_catcher_flight_chain_selected():

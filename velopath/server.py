@@ -103,7 +103,7 @@ class RerenderPayload(BaseModel):
     ball_type: str = "auto"
     perspective: str = "auto"
     pitch_number: int = 1
-    trim_to_pitch: bool = True
+    trim_to_pitch: bool = False
     hud_style: str = "none"
 
 
@@ -116,7 +116,7 @@ async def process_uploaded_video(
     ball_type: str = Form("auto"),
     perspective: str = Form("auto"),
     custom_strike_zone: Optional[str] = Form(None),
-    trim_to_pitch: bool = Form(True),
+    trim_to_pitch: bool = Form(False),
     hud_style: str = Form("none"),
 ):
     """Accepts an uploaded pitch video and returns Pitch Lab metrics and rendered video."""

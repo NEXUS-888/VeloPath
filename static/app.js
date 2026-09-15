@@ -639,7 +639,7 @@ document.addEventListener('DOMContentLoaded', () => {
         loadingStatusText.textContent = 'Re-rendering Strike Zone & Streamline (~1s)...';
 
         const ballType = ballTypeSelect?.value || 'auto';
-        const trimPitch = trimPitchCheckbox?.checked ?? true;
+        const trimPitch = trimPitchCheckbox?.checked ?? false;
         const hudStyle = cleanVideoCheckbox?.checked ? 'none' : 'minimal_badge';
 
         const payload = {
@@ -697,7 +697,7 @@ document.addEventListener('DOMContentLoaded', () => {
         formData.append('graphic_style', activeGraphicStyle);
         formData.append('ball_type', ballTypeSelect?.value || 'auto');
         formData.append('perspective', activePerspective);
-        formData.append('trim_to_pitch', trimPitchCheckbox?.checked ?? true);
+        formData.append('trim_to_pitch', trimPitchCheckbox?.checked ?? false);
         formData.append('hud_style', cleanVideoCheckbox?.checked ? 'none' : 'minimal_badge');
 
         try {

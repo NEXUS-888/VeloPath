@@ -413,29 +413,12 @@ class PitchTracker:
             coarse_hits, width, height, resolved_perspective, max_dt=max(8, coarse_stride * 4)
         )
 
-        # Auto perspective resolution from candidate trajectory kinematics
-        if resolved_perspective == "auto":
-            is_catcher_view = False
-            for c in chains:
-                if len(c) >= 2:
-                    p0 = c[0]
-                    p1 = c[-1]
-                    p0_y = p0[2] if isinstance(p0, tuple) else p0.y
-                    p1_y = p1[2] if isinstance(p1, tuple) else p1.y
-                    p0_x = p0[1] if isinstance(p0, tuple) else p0.x
-                    p1_x = p1[1] if isinstance(p1, tuple) else p1.x
-                    dx = p1_x - p0_x
-                    dy = p1_y - p0_y
-                    # Pitcher is in mid-depth (y < 0.60*h) and central corridor (0.25*w to 0.75*w), plate is in foreground (y > 0.52*h)
-                    if (p0_y < (height * 0.60) and p1_y > (height * 0.52) and dy > (height * 0.08) 
-                            and abs(dx) < (width * 0.45) and (width * 0.25 <= p0_x <= width * 0.75)):
-                        is_catcher_view = True
-                        break
-            resolved_perspective = "behind_catcher" if is_catcher_view else "behind_pitcher"
-
         best_chain = self._select_best_flight_chain(
             chains, width, height, total_frames, resolved_perspective, fps=fps
         ) if chains else None
+
+        if resolved_perspective == "auto" and getattr(self, "last_resolved_perspective", None):
+            resolved_perspective = self.last_resolved_perspective
 
         if best_chain:
             expected_flight_frames = int(round(0.65 * fps))
@@ -711,22 +694,18 @@ class PitchTracker:
 
         return [c for c in linked if len(c) >= 2]
 
-    def _select_best_flight_chain(
+    def _score_chains_for_perspective(
         self,
         chains: List[List[Any]],
         width: int,
         height: int,
         total_frames: int,
-        perspective: str = "auto",
-        fps: float = 30.0
-    ) -> Optional[List[Any]]:
-        """
-        Selects the best pitch flight chain based on ballistic kinetic energy,
-        net displacement, straightness, and velocity, rejecting stationary noise.
-        Supports both coarse hit tuples (f, x, y, conf, r) and TrajectoryPoint objects.
-        """
+        perspective: str,
+        fps: float = 30.0,
+    ) -> Tuple[Optional[List[Any]], float]:
+        """Scores candidate chains against ballistic flight constraints for a given perspective."""
         if not chains:
-            return None
+            return None, 0.0
 
         def get_pt(p):
             if hasattr(p, "frame_idx"):
@@ -739,7 +718,6 @@ class PitchTracker:
         min_disp = 20.0 * scale
 
         def score_chain(c):
-            # A real pitch flight must have at least 3 detections (filters out 2-frame camera noise)
             if len(c) < 3:
                 return 0.00001
             p0 = get_pt(c[0])
@@ -758,10 +736,12 @@ class PitchTracker:
             if disp > (width * 0.85):
                 return 0.00001
 
-            # Reject horizontal background walkers (outfielders moving laterally with little vertical change)
-            if abs(dx) > (width * 0.08) and abs(dy) < (height * 0.05):
+            # Side-view rejection: Model and ABS strike zones require tunnel perspectives (behind-catcher / broadcast)
+            if abs(dx) > (width * 0.35) and abs(dx) > (1.8 * max(1.0, abs(dy))):
                 return 0.00001
-            if abs(dy) < (height * 0.04) and disp > (width * 0.08):
+
+            # Margin guard: pitches travel down the field tunnel, not locked to sideline edges
+            if (p0[1] > (width * 0.88) and p1[1] > (width * 0.88)) or (p0[1] < (width * 0.12) and p1[1] < (width * 0.12)):
                 return 0.00001
 
             # Check maximum step speed between consecutive detections in chain
@@ -774,26 +754,20 @@ class PitchTracker:
                 if (s_dist / float(s_dt)) > max_step:
                     return 0.00001
 
-            # Universal physics constraint: Pitched balls drop or stay level; they cannot launch upwards into the sky
-            if dy < (-25.0 * (height / 1080.0)):
-                return 0.00001
-
-            # Side-view rejection: Model and ABS strike zones require tunnel perspectives (behind-catcher / broadcast)
-            if abs(dx) > (width * 0.35) and abs(dx) > (1.8 * max(1.0, abs(dy))):
-                return 0.00001
-
-            # Margin guard: pitches travel down the field tunnel, not locked to sideline edges
-            if (p0[1] > (width * 0.88) and p1[1] > (width * 0.88)) or (p0[1] < (width * 0.12) and p1[1] < (width * 0.12)):
-                return 0.00001
-
-            # Directional physics constraints
+            # Perspective-specific directional physics constraints
             if perspective in ["behind_plate", "behind_catcher"]:
+                # In behind-catcher view: ball travels from pitcher toward catcher/camera (dy > 0)
+                if dy < (-25.0 * (height / 1080.0)):
+                    return 0.00001
                 if dx < -15.0 * scale:
                     return 0.00001
-                # Reject chains that stay confined entirely within the pitcher mound without progressing
+                # Reject chains confined entirely to mound without progressing forward
                 if p0[1] < (width * 0.50) and p1[1] < (width * 0.50) and p1[2] < (height * 0.70) and disp < (width * 0.20):
                     return 0.00001
-            elif perspective == "behind_pitcher":
+            elif perspective in ["behind_pitcher", "broadcast"]:
+                # In behind-pitcher view: ball travels away from camera toward home plate in distance (dy < 0)
+                if dy > (25.0 * (height / 1080.0)):
+                    return 0.00001
                 if disp < (width * 0.08):
                     return 0.00001
 
@@ -814,21 +788,18 @@ class PitchTracker:
             # Expected pitch duration (~0.25s - 0.85s)
             expected_frames = 0.45 * fps
             dur_ratio = dt / max(1.0, expected_frames)
-            if 0.3 <= dur_ratio <= 2.2:
-                dur_factor = 1.2
-            else:
-                dur_factor = max(0.4, 1.0 - abs(1.0 - dur_ratio) * 0.4)
+            dur_factor = 1.2 if 0.3 <= dur_ratio <= 2.2 else max(0.4, 1.0 - abs(1.0 - dur_ratio) * 0.4)
 
             mean_conf = sum(get_pt(pt)[3] for pt in c) / len(c)
-            # Saturate chain length bonus so slow body movements don't overpower true pitches
             len_bonus = min(22.0, float(len(c))) ** 1.3
+
             # Flight progress toward target
             if perspective in ["behind_plate", "behind_catcher"]:
                 target_progress = max(0.0, (dx / float(width)) + (dy / float(height)))
                 progress_bonus = 1.0 + 3.0 * target_progress
-            elif perspective == "behind_pitcher":
-                target_progress = max(0.0, disp / float(width))
-                progress_bonus = 1.0 + 1.5 * target_progress
+            elif perspective in ["behind_pitcher", "broadcast"]:
+                target_progress = max(0.0, -dy / float(height))
+                progress_bonus = 1.0 + 3.0 * target_progress
             else:
                 progress_bonus = 1.0
 
@@ -842,10 +813,40 @@ class PitchTracker:
 
         if valid_scored:
             valid_scored.sort(key=lambda x: x[0], reverse=True)
-            return valid_scored[0][1]
+            return valid_scored[0][1], valid_scored[0][0]
 
-        # No chain satisfied physical ballistic constraints
-        return None
+        return None, 0.0
+
+    def _select_best_flight_chain(
+        self,
+        chains: List[List[Any]],
+        width: int,
+        height: int,
+        total_frames: int,
+        perspective: str = "auto",
+        fps: float = 30.0,
+    ) -> Optional[List[Any]]:
+        """
+        Selects the best pitch flight chain based on ballistic kinetic energy,
+        net displacement, straightness, and velocity, rejecting stationary noise.
+        Supports both coarse hit tuples (f, x, y, conf, r) and TrajectoryPoint objects.
+        """
+        if not chains:
+            return None
+
+        if perspective == "auto":
+            chain_bp, score_bp = self._score_chains_for_perspective(chains, width, height, total_frames, "behind_pitcher", fps)
+            chain_bc, score_bc = self._score_chains_for_perspective(chains, width, height, total_frames, "behind_catcher", fps)
+            if score_bc > score_bp and score_bc > 0.05:
+                self.last_resolved_perspective = "behind_catcher"
+                return chain_bc
+            elif score_bp > 0.05:
+                self.last_resolved_perspective = "behind_pitcher"
+                return chain_bp
+            return None
+
+        best_chain, _ = self._score_chains_for_perspective(chains, width, height, total_frames, perspective, fps)
+        return best_chain
 
     def _extrapolate_measured_flight(
         self,
@@ -877,11 +878,8 @@ class PitchTracker:
             # In behind-catcher view, plate crossing requires reaching the plate/catcher region
             if (p_last.x >= (width * 0.62) and p_last.y >= (height * 0.38)) or p_last.x >= (width * 0.72) or p_last.y >= (height * 0.70):
                 reached_plate = True
-        elif perspective == "behind_pitcher":
-            if p_last.y >= (height * 0.70):
-                reached_plate = True
-        elif perspective == "broadcast":
-            if p_last.y >= (height * 0.40):
+        elif perspective in ["behind_pitcher", "broadcast"]:
+            if p_last.y <= (height * 0.55):
                 reached_plate = True
 
         target_pts = int(round(0.42 * fps))
@@ -906,10 +904,10 @@ class PitchTracker:
                 # Ensure minimum forward progress velocity towards catcher
                 vx = max(vx, 8.0 * scale_x)
                 vy = max(vy, 10.0 * scale_y)
-            elif perspective == "behind_pitcher":
+            elif perspective in ["behind_pitcher", "broadcast"]:
                 max_extrap_steps = max(max_extrap_steps, 20)
                 if abs(vy) < 0.1:
-                    vy = 6.0 * scale_y
+                    vy = -6.0 * scale_y
 
         cur_x = last_x
         cur_y = last_y
