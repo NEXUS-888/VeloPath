@@ -286,12 +286,13 @@ class PitchTracker:
         frame_stride: int = 1,
         ball_type: str = "auto",
         perspective: str = "auto",
-        progress_callback: Optional[Callable[[float], None]] = None
+        progress_callback: Optional[Callable[[float], None]] = None,
+        mode: str = "baseball",
     ) -> Tuple[List[TrajectoryPoint], float, Tuple[int, int]]:
         """
         Processes video using a hybrid architecture:
         YOLO deep learning + adaptive HSV color/motion contour tracking.
-        Supports broadcast, behind-plate, and behind-pitcher / bowler POV.
+        Supports both baseball pitching tunnels and unconstrained normal video modes.
         """
         cap = cv2.VideoCapture(video_path)
         if not cap.isOpened():
@@ -302,10 +303,13 @@ class PitchTracker:
         height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
-        # 1. Perspective Determination
+        # 1. Perspective & Mode Determination
         is_portrait = height > width
         raw_persp = (perspective or "auto").lower().strip()
-        if raw_persp in ["behind_plate", "behind_catcher", "catcher", "plate"]:
+        is_normal_mode = (mode or "baseball").lower().strip() in ["normal", "general"] or raw_persp in ["normal", "general"]
+        if is_normal_mode:
+            resolved_perspective = "normal"
+        elif raw_persp in ["behind_plate", "behind_catcher", "catcher", "plate"]:
             resolved_perspective = "behind_catcher"
         elif raw_persp in ["behind_pitcher", "pitcher", "bowler"]:
             resolved_perspective = "behind_pitcher"
@@ -314,11 +318,17 @@ class PitchTracker:
         else:
             resolved_perspective = "auto"
 
-        # Perspective-aware spatial corridor (covers release to plate, filters sky/clouds)
-        corridor_x1 = width * 0.05
-        corridor_x2 = width * 0.95
-        corridor_y1 = height * 0.15 if (resolved_perspective == "behind_catcher" or not is_portrait) else height * 0.05
-        corridor_y2 = height * 0.95
+        # Spatial corridor: normal mode covers full frame, baseball mode filters out sky/crowds
+        if is_normal_mode:
+            corridor_x1 = 0.0
+            corridor_x2 = float(width)
+            corridor_y1 = 0.0
+            corridor_y2 = float(height)
+        else:
+            corridor_x1 = width * 0.05
+            corridor_x2 = width * 0.95
+            corridor_y1 = height * 0.15 if (resolved_perspective == "behind_catcher" or not is_portrait) else height * 0.05
+            corridor_y2 = height * 0.95
 
         # 2. Coarse Candidate Scan across the video
         # For short clips (<= 180 frames, ~1-3 seconds), use stride 1 so fast pitch deliveries are never missed
@@ -359,10 +369,10 @@ class PitchTracker:
                 return_all=True
             )
             frame_hits = []
-            min_y_limit = height * 0.18 if not is_portrait else height * 0.05
+            min_y_limit = 0.0 if is_normal_mode else (height * 0.18 if not is_portrait else height * 0.05)
             for cand in cands:
-                if self.model is None or ball_type != "auto" or cand[3] >= (0.45 if ball_type != "baseball" else 0.55):
-                    if is_portrait or cand[1] >= min_y_limit:
+                if self.model is None or is_normal_mode or ball_type != "auto" or cand[3] >= (0.45 if ball_type != "baseball" else 0.55):
+                    if is_normal_mode or is_portrait or cand[1] >= min_y_limit:
                         frame_hits.append((f, cand[0], cand[1], cand[3], cand[2] * 2.0))
 
             # Pass 2: High-accuracy YOLO baseball model with motion pre-gate
@@ -383,14 +393,14 @@ class PitchTracker:
                             bx1, by1, bx2, by2 = b.xyxy[0].tolist()
                             bcx = (bx1 + bx2) / 2.0 + crop_x1
                             bcy = (by1 + by2) / 2.0 + crop_y1
-                            if is_portrait or bcy >= min_y_limit:
+                            if is_normal_mode or is_portrait or bcy >= min_y_limit:
                                 frame_hits.append((f, bcx, bcy, float(b.conf[0]), bx2 - bx1))
                     except Exception:
                         pass
 
             if not frame_hits and cands:
                 for cand in cands:
-                    if cand[3] >= 0.45 and (is_portrait or cand[1] >= min_y_limit):
+                    if cand[3] >= 0.45 and (is_normal_mode or is_portrait or cand[1] >= min_y_limit):
                         frame_hits.append((f, cand[0], cand[1], cand[3], cand[2] * 2.0))
 
             if frame_hits:
@@ -657,8 +667,8 @@ class PitchTracker:
             return p[0], p[1], p[2], p[3]
 
         scale = max(1.0, width / 1280.0)
-        max_step_speed = 65.0 * scale
-        max_pred_err = 28.0 * scale
+        max_step_speed = (85.0 if perspective in ["normal", "general"] else 65.0) * scale
+        max_pred_err = (35.0 if perspective in ["normal", "general"] else 28.0) * scale
 
         linked: List[List[Any]] = []
         for pt in points:
@@ -683,6 +693,8 @@ class PitchTracker:
                         # Ball moves towards target/plate (away from camera or across tunnel)
                         # Pitches naturally drop due to gravity
                         pass
+                    elif perspective in ["normal", "general"]:
+                        dir_valid = True
 
                     if speed <= max_step_speed and dir_valid:
                         if len(c) >= 2:
@@ -732,6 +744,54 @@ class PitchTracker:
         min_ballistic_speed = 0.8 * scale
         max_ballistic_speed = 95.0 * scale
         min_disp = 20.0 * scale
+
+        if perspective in ["normal", "general"]:
+            def score_normal_chain(c):
+                if len(c) < 3:
+                    return 0.00001
+                p0 = get_pt(c[0])
+                p1 = get_pt(c[-1])
+                dt = max(1, p1[0] - p0[0])
+                dx = p1[1] - p0[1]
+                dy = p1[2] - p0[2]
+                disp = np.hypot(dx, dy)
+                speed = disp / float(dt)
+
+                # Require meaningful physical displacement (>= 5% of smaller frame dimension)
+                if disp < (min(width, height) * 0.05) or speed < (0.4 * scale) or speed > (120.0 * scale):
+                    return 0.00001
+
+                max_step = 100.0 * scale
+                for i in range(len(c) - 1):
+                    pa = get_pt(c[i])
+                    pb = get_pt(c[i + 1])
+                    s_dt = max(1, pb[0] - pa[0])
+                    s_dist = np.hypot(pb[1] - pa[1], pb[2] - pa[2])
+                    if (s_dist / float(s_dt)) > max_step:
+                        return 0.00001
+
+                path_len = sum(
+                    np.hypot(get_pt(c[i+1])[1] - get_pt(c[i])[1], get_pt(c[i+1])[2] - get_pt(c[i])[2])
+                    for i in range(len(c) - 1)
+                )
+                straightness = disp / max(1.0, path_len)
+                if straightness < 0.35:
+                    return 0.00001
+
+                mean_conf = sum(get_pt(pt)[3] for pt in c) / len(c)
+                len_bonus = min(30.0, float(len(c))) ** 1.3
+                disp_bonus = min(3.0, 1.0 + disp / float(max(width, height)))
+                return len_bonus * (mean_conf ** 1.2) * (straightness ** 1.5) * disp_bonus
+
+            valid_scored = []
+            for c in chains:
+                sc = score_normal_chain(c)
+                if sc > 0.05:
+                    valid_scored.append((sc, c))
+            if valid_scored:
+                valid_scored.sort(key=lambda x: x[0], reverse=True)
+                return valid_scored[0][1], valid_scored[0][0]
+            return None, 0.0
 
         def score_chain(c):
             if len(c) < 3:
@@ -792,6 +852,9 @@ class PitchTracker:
             elif perspective in ["broadcast", "tv"]:
                 # Broadcast centerfield is always landscape (never portrait)
                 if height > width:
+                    return 0.00001
+                # Centerfield broadcast camera: ball travels from pitcher (center-left) towards plate on right (dx > 0)
+                if dx < (-15.0 * scale):
                     return 0.00001
                 # In broadcast centerfield view: ball travels across the field tunnel from pitcher to catcher
                 if disp < (width * 0.10) or abs(dx) < (width * 0.05):
@@ -865,6 +928,13 @@ class PitchTracker:
         if not chains:
             return None
 
+        if perspective in ["normal", "general"]:
+            best_chain, best_score = self._score_chains_for_perspective(chains, width, height, total_frames, "normal", fps)
+            if best_score > 0.05:
+                self.last_resolved_perspective = "normal"
+                return best_chain
+            return None
+
         if perspective == "auto":
             chain_bp, score_bp = self._score_chains_for_perspective(chains, width, height, total_frames, "behind_pitcher", fps)
             chain_bc, score_bc = self._score_chains_for_perspective(chains, width, height, total_frames, "behind_catcher", fps)
@@ -882,8 +952,11 @@ class PitchTracker:
                 return best_c
             return None
 
-        best_chain, _ = self._score_chains_for_perspective(chains, width, height, total_frames, perspective, fps)
-        return best_chain
+        best_chain, best_score = self._score_chains_for_perspective(chains, width, height, total_frames, perspective, fps)
+        if best_score > 0.05:
+            self.last_resolved_perspective = perspective
+            return best_chain
+        return None
 
     def _extrapolate_measured_flight(
         self,

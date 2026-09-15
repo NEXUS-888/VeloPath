@@ -85,6 +85,34 @@
 
         <!-- Left Column: Video Stage & Modern Media Deck (8 cols on XL) -->
         <div class="xl:col-span-8 flex flex-col gap-4">
+
+            <!-- Dual-Mode Selector Bar -->
+            <div class="glass-panel card-outer flex flex-wrap items-center justify-between gap-3 py-2.5 px-3.5">
+                <div class="flex items-center gap-2.5">
+                    <div class="p-1.5 rounded-lg bg-slate-800 text-pitchcyan border border-white/10">
+                        <i data-lucide="layers" class="w-4 h-4"></i>
+                    </div>
+                    <div>
+                        <div class="text-xs font-bold text-white flex items-center gap-2">
+                            <span>Tracking Engine</span>
+                            <span id="modeStatusPill" class="text-[10px] font-semibold text-pitchcyan px-2 py-0.5 rounded-full bg-pitchcyan/10 border border-pitchcyan/20">⚾ Baseball ABS Mode</span>
+                        </div>
+                        <p id="modeDescriptionText" class="text-[11px] text-slate-400">Pitch tunnel gating, 60.5ft ABS strike zone, and Statcast 3D streamline.</p>
+                    </div>
+                </div>
+
+                <!-- Segmented Control Buttons -->
+                <div class="flex items-center gap-1 bg-slate-900/90 p-1 rounded-xl border border-white/10">
+                    <button id="modeBaseballBtn" type="button" class="mode-btn px-3 py-1.5 rounded-lg text-xs font-bold bg-pitchcyan text-black shadow-sm transition flex items-center gap-1.5">
+                        <i data-lucide="target" class="w-3.5 h-3.5"></i>
+                        <span>⚾ Baseball Pitch</span>
+                    </button>
+                    <button id="modeNormalBtn" type="button" class="mode-btn px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:text-white transition flex items-center gap-1.5">
+                        <i data-lucide="play" class="w-3.5 h-3.5"></i>
+                        <span>🎯 Normal / Any Video</span>
+                    </button>
+                </div>
+            </div>
             
             <!-- Video Viewport Container -->
             <div class="video-viewport-wrapper relative aspect-[16/9] max-h-[72vh] flex items-center justify-center group bg-black overflow-hidden select-none" id="videoDropZone">
@@ -370,8 +398,14 @@
                 </div>
 
                 <div class="space-y-3">
+                    <!-- Normal Mode Notification Banner -->
+                    <div id="normalModeNotice" class="hidden p-2.5 rounded-xl bg-pitchcyan/10 border border-pitchcyan/20 text-xs text-pitchcyan flex items-start gap-2">
+                        <i data-lucide="info" class="w-4 h-4 shrink-0 mt-0.5"></i>
+                        <span><strong>Normal Video Mode Active:</strong> Tracking ball trajectory across full video. Strike zone overlay is hidden.</span>
+                    </div>
+
                     <!-- Perspective Presets Segmented Control -->
-                    <div>
+                    <div id="cameraPresetContainer">
                         <label class="text-[11px] font-semibold text-slate-400 block mb-1.5">Camera Angle Preset</label>
                         <div class="grid grid-cols-4 gap-1 bg-slate-900/90 p-1 rounded-xl border border-white/10 text-center">
                             <button type="button" data-perspective="auto" class="perspective-btn px-2 py-1.5 rounded-lg text-xs font-bold bg-pitchcyan text-black transition">Auto</button>

@@ -370,3 +370,96 @@ def test_broadcast_flight_chain_selected():
     )
     assert best == pitch_chain, "Broadcast pitch delivery across field must be selected"
     assert tracker.last_resolved_perspective == "broadcast", "Perspective must resolve to broadcast"
+
+
+def test_normal_mode_tracks_arbitrary_trajectory():
+    """
+    Verify that casual throws (e.g. right-to-left throw across the frame or upward toss)
+    are accepted and scored in normal mode, even though baseball pitch tunnels would reject them.
+    """
+    from velopath.tracker import PitchTracker
+
+    tracker = PitchTracker()
+    width, height = 1280, 720
+
+    # Right-to-left throw: x decreases from 1000 to 300, slight downward drop y: 300 -> 360
+    casual_throw = [
+        (f, 1000.0 - (f - 20) * 50.0, 300.0 + (f - 20) * 4.0, 0.7, 12.0)
+        for f in range(20, 34)
+    ]
+    # Stationary noise
+    noise_chain = [
+        (f, 200.0, 200.0, 0.4, 10.0)
+        for f in range(5, 15)
+    ]
+
+    # In baseball mode ("auto"), right-to-left throw with dx < -15 and small dy is rejected
+    best_baseball = tracker._select_best_flight_chain(
+        [noise_chain, casual_throw],
+        width=width,
+        height=height,
+        total_frames=60,
+        perspective="auto"
+    )
+    assert best_baseball is None, "Baseball mode should reject pure right-to-left casual throw"
+
+    # In normal mode ("normal"), casual throw is successfully recognized
+    best_normal = tracker._select_best_flight_chain(
+        [noise_chain, casual_throw],
+        width=width,
+        height=height,
+        total_frames=60,
+        perspective="normal"
+    )
+    assert best_normal == casual_throw, "Normal mode must track casual right-to-left throw"
+    assert tracker.last_resolved_perspective == "normal"
+
+
+def test_normal_mode_links_reverse_direction_points():
+    """Verify points moving in reverse or upward direction are linked when perspective='normal'."""
+    from velopath.tracker import PitchTracker
+
+    tracker = PitchTracker()
+    points = [
+        (10, 800.0, 400.0, 0.8),
+        (11, 750.0, 380.0, 0.8),  # dx = -50, dy = -20 (upward and leftward)
+        (12, 700.0, 360.0, 0.8),
+    ]
+    chains = tracker._link_points_into_chains(points, width=1280, height=720, perspective="normal")
+    assert len(chains) == 1
+    assert len(chains[0]) == 3
+
+
+def test_pipeline_normal_mode_disables_strike_zone(tmp_path):
+    """Verify process_pitch_video with mode='normal' produces BALL TRACKED and disables strike zone overlay."""
+    import cv2
+    import numpy as np
+    from velopath.pipeline import process_pitch_video
+
+    # Generate a synthetic casual video with a ball moving right-to-left
+    vid_path = str(tmp_path / "casual_throw.mp4")
+    out_path = str(tmp_path / "out_casual.mp4")
+    w, h, fps = 640, 360, 30
+    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+    writer = cv2.VideoWriter(vid_path, fourcc, fps, (w, h))
+
+    for f in range(25):
+        frame = np.full((h, w, 3), 60, dtype=np.uint8)
+        if 5 <= f <= 20:
+            bx = int(500 - (f - 5) * 20)  # right to left: 500 down to 200
+            by = int(120 + (f - 5) * 4)
+            cv2.circle(frame, (bx, by), 7, (240, 240, 240), -1)
+        writer.write(frame)
+    writer.release()
+
+    res = process_pitch_video(
+        input_video_path=vid_path,
+        output_video_path=out_path,
+        mode="normal"
+    )
+
+    assert res["mode"] == "normal"
+    assert res["show_strike_zone"] is False
+    assert res["call"] == "BALL TRACKED"
+    assert res["pitch_tag"] == "Ball Flight"
+

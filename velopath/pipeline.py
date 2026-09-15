@@ -68,11 +68,13 @@ def process_pitch_video(
     trim_to_pitch: bool = False,
     hud_style: str = "none",
     max_dimension: Optional[int] = 1920,
+    mode: str = "baseball",
 ) -> Dict[str, Any]:
     """
     Complete end-to-end Pitch Lab analysis:
     Tracks ball trajectory, calculates speed (MPH), checks strike zone,
     and renders output video with Statcast 3D streamline and HUD card.
+    Supports both Baseball Pitch Mode and Normal / Any Video Mode.
     """
     if not os.path.exists(input_video_path):
         raise FileNotFoundError(f"Video file not found: {input_video_path}")
@@ -86,6 +88,7 @@ def process_pitch_video(
         conf_thresh=conf_thresh,
         ball_type=ball_type,
         perspective=perspective,
+        mode=mode,
     )
 
     cap = cv2.VideoCapture(input_video_path)
@@ -157,7 +160,10 @@ def process_pitch_video(
                 best_idx = i
         trajectory_points = trajectory_points[best_idx : best_idx + max_flight_frames]
 
-    # 2. Calibrated Strike Zone (Broadcast center-field vs Mobile perspective)
+    resolved_perspective = getattr(tracker, "last_resolved_perspective", None) or perspective
+    is_normal_mode = (mode or "baseball").lower().strip() in ["normal", "general"] or resolved_perspective in ["normal", "general"]
+
+    # 2. Calibrated Strike Zone (Broadcast center-field vs Mobile perspective vs Normal Mode)
     if custom_strike_zone:
         strike_zone = StrikeZone(
             x_min=custom_strike_zone["x_min"],
@@ -165,12 +171,16 @@ def process_pitch_video(
             x_max=custom_strike_zone["x_max"],
             y_max=custom_strike_zone["y_max"],
         )
+        show_strike_zone = True
+    elif is_normal_mode:
+        strike_zone = StrikeZone.get_preset_zone(width, height, view_type="behind_catcher")
+        show_strike_zone = False
     else:
-        resolved_perspective = getattr(tracker, "last_resolved_perspective", None) or perspective
         plate_pt_hint = (trajectory_points[-1].x, trajectory_points[-1].y) if trajectory_points else None
         strike_zone = StrikeZone.get_preset_zone(
             width, height, view_type=resolved_perspective, plate_point=plate_pt_hint
         )
+        show_strike_zone = True
 
     # 3. Physically Grounded Timing & Aerodynamic Velocity
     release_frame = trajectory_points[0].frame_idx
@@ -198,16 +208,31 @@ def process_pitch_video(
     coords = [(p.x, p.y) for p in trajectory_points]
     px_per_in = max(0.5, (height * 0.15) / 17.0)
     horz_break_in, vert_break_in = calculate_pitch_break(coords, pixels_per_inch=px_per_in)
-    pitch_tag = classify_pitch_type(velocity_mph, vert_break_in, horz_break_in)
 
-    # Evaluate crossing point at home plate
-    plate_pt = find_plate_crossing_point(trajectory_points, strike_zone, ball_radius=12.0)
-    call_result = evaluate_pitch(
-        plate_cross_point=plate_pt,
-        strike_zone=strike_zone,
-        ball_radius=12.0,
-        pixels_per_inch=px_per_in
-    )
+    if is_normal_mode:
+        pitch_tag = "Ball Flight"
+        plate_pt = (float(trajectory_points[-1].x), float(trajectory_points[-1].y))
+        call_result = PitchCallResult(
+            is_strike=True,
+            call="BALL TRACKED",
+            plate_x=plate_pt[0],
+            plate_y=plate_pt[1],
+            zone_x_min=strike_zone.x_min,
+            zone_y_min=strike_zone.y_min,
+            zone_x_max=strike_zone.x_max,
+            zone_y_max=strike_zone.y_max,
+            dist_to_center_in=0.0,
+        )
+    else:
+        pitch_tag = classify_pitch_type(velocity_mph, vert_break_in, horz_break_in)
+        # Evaluate crossing point at home plate
+        plate_pt = find_plate_crossing_point(trajectory_points, strike_zone, ball_radius=12.0)
+        call_result = evaluate_pitch(
+            plate_cross_point=plate_pt,
+            strike_zone=strike_zone,
+            ball_radius=12.0,
+            pixels_per_inch=px_per_in
+        )
 
     # 5. Render final Pitch Lab video
     os.makedirs(os.path.dirname(os.path.abspath(output_video_path)), exist_ok=True)
@@ -223,7 +248,7 @@ def process_pitch_video(
         pitch_number=pitch_number,
         pitch_tag=pitch_tag,
         flight_time_ms=flight_time_ms,
-        show_strike_zone=True,
+        show_strike_zone=show_strike_zone,
         graphic_style=graphic_style,
         trim_to_pitch=trim_to_pitch,
         hud_style=hud_style,
@@ -235,6 +260,8 @@ def process_pitch_video(
 
     return {
         "pitch_detected": True,
+        "mode": "normal" if is_normal_mode else "baseball",
+        "show_strike_zone": show_strike_zone,
         "pitch_number": pitch_number,
         "velocity_mph": velocity_mph,
         "velocity_kmh": velocity_kmh,
@@ -344,9 +371,12 @@ def rerender_pitch(
     trim_to_pitch: bool = False,
     hud_style: str = "none",
     max_dimension: Optional[int] = 1920,
+    mode: str = "baseball",
+    show_strike_zone: Optional[bool] = None,
 ) -> dict:
     """
     Fast re-render using existing tracked trajectory and updated strike zone or graphic theme.
+    Supports both Baseball Pitch Mode and Normal / Any Video Mode.
     """
     pts = [
         TrajectoryPoint(frame_idx=int(p["frame"]), x=float(p["x"]), y=float(p["y"]), conf=0.9)
@@ -358,12 +388,20 @@ def rerender_pitch(
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     cap.release()
 
-    strike_zone = StrikeZone(
-        x_min=float(custom_strike_zone["x_min"]),
-        y_min=float(custom_strike_zone["y_min"]),
-        x_max=float(custom_strike_zone["x_max"]),
-        y_max=float(custom_strike_zone["y_max"]),
-    )
+    is_normal_mode = (mode or "baseball").lower().strip() in ["normal", "general"] or (perspective or "").lower().strip() in ["normal", "general"]
+
+    if show_strike_zone is None:
+        show_strike_zone = not is_normal_mode
+
+    if custom_strike_zone:
+        strike_zone = StrikeZone(
+            x_min=float(custom_strike_zone["x_min"]),
+            y_min=float(custom_strike_zone["y_min"]),
+            x_max=float(custom_strike_zone["x_max"]),
+            y_max=float(custom_strike_zone["y_max"]),
+        )
+    else:
+        strike_zone = StrikeZone.get_preset_zone(width, height, view_type="behind_catcher")
 
     release_frame = pts[0].frame_idx
     plate_frame = pts[-1].frame_idx
@@ -389,15 +427,30 @@ def rerender_pitch(
     coords = [(p.x, p.y) for p in pts]
     px_per_in = max(0.5, (height * 0.15) / 17.0)
     horz_break_in, vert_break_in = calculate_pitch_break(coords, pixels_per_inch=px_per_in)
-    pitch_tag = classify_pitch_type(velocity_mph, vert_break_in, horz_break_in)
 
-    plate_pt = find_plate_crossing_point(pts, strike_zone, ball_radius=12.0)
-    call_result = evaluate_pitch(
-        plate_cross_point=plate_pt,
-        strike_zone=strike_zone,
-        ball_radius=12.0,
-        pixels_per_inch=px_per_in
-    )
+    if is_normal_mode:
+        pitch_tag = "Ball Flight"
+        plate_pt = (float(pts[-1].x), float(pts[-1].y))
+        call_result = PitchCallResult(
+            is_strike=True,
+            call="BALL TRACKED",
+            plate_x=plate_pt[0],
+            plate_y=plate_pt[1],
+            zone_x_min=strike_zone.x_min,
+            zone_y_min=strike_zone.y_min,
+            zone_x_max=strike_zone.x_max,
+            zone_y_max=strike_zone.y_max,
+            dist_to_center_in=0.0,
+        )
+    else:
+        pitch_tag = classify_pitch_type(velocity_mph, vert_break_in, horz_break_in)
+        plate_pt = find_plate_crossing_point(pts, strike_zone, ball_radius=12.0)
+        call_result = evaluate_pitch(
+            plate_cross_point=plate_pt,
+            strike_zone=strike_zone,
+            ball_radius=12.0,
+            pixels_per_inch=px_per_in
+        )
 
     renderer = PitchRenderer(graphic_style=graphic_style)
     out_w, out_h = renderer.render_complete_video(
@@ -412,7 +465,7 @@ def rerender_pitch(
         pitch_number=pitch_number,
         pitch_tag=pitch_tag,
         flight_time_ms=flight_time_ms,
-        show_strike_zone=True,
+        show_strike_zone=show_strike_zone,
         graphic_style=graphic_style,
         trim_to_pitch=trim_to_pitch,
         hud_style=hud_style,
@@ -421,6 +474,8 @@ def rerender_pitch(
 
     return {
         "pitch_number": pitch_number,
+        "mode": "normal" if is_normal_mode else "baseball",
+        "show_strike_zone": show_strike_zone,
         "velocity_mph": velocity_mph,
         "velocity_kmh": velocity_kmh,
         "plate_velocity_mph": plate_velocity_mph,

@@ -98,13 +98,15 @@ class RerenderPayload(BaseModel):
     video_id: str
     trajectory: list
     distance_ft: float = 60.5
-    custom_strike_zone: dict
+    custom_strike_zone: Optional[dict] = None
     graphic_style: str = "statcast_cyan"
     ball_type: str = "auto"
     perspective: str = "auto"
     pitch_number: int = 1
     trim_to_pitch: bool = False
     hud_style: str = "none"
+    mode: str = "baseball"
+    show_strike_zone: Optional[bool] = None
 
 
 @app.post("/api/process")
@@ -118,6 +120,7 @@ async def process_uploaded_video(
     custom_strike_zone: Optional[str] = Form(None),
     trim_to_pitch: bool = Form(False),
     hud_style: str = Form("none"),
+    mode: str = Form("baseball"),
 ):
     """Accepts an uploaded pitch video and returns Pitch Lab metrics and rendered video."""
     file_id = str(uuid.uuid4())[:8]
@@ -148,6 +151,7 @@ async def process_uploaded_video(
             perspective=perspective,
             trim_to_pitch=trim_to_pitch,
             hud_style=hud_style,
+            mode=mode,
         )
         result["video_id"] = file_id
         result["video_url"] = f"/api/video/{output_filename}"
@@ -185,6 +189,8 @@ async def rerender_existing_pitch(payload: RerenderPayload):
             perspective=payload.perspective,
             trim_to_pitch=payload.trim_to_pitch,
             hud_style=payload.hud_style,
+            mode=payload.mode,
+            show_strike_zone=payload.show_strike_zone,
         )
         result["video_id"] = payload.video_id
         result["video_url"] = f"/api/video/{output_filename}"
