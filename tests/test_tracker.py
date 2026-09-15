@@ -343,5 +343,30 @@ def test_no_pitch_detected_guard():
     assert best is None, "Drift noise must return None to prevent hallucinated pitch"
 
 
+def test_broadcast_flight_chain_selected():
+    """Verify diagonal pitch delivery from mound across to home plate is selected in broadcast view."""
+    from velopath.tracker import PitchTracker
 
+    tracker = PitchTracker()
+    width, height = 1280, 720
 
+    # Broadcast centerfield pitch: pitcher on left (x~350, y~400) to catcher on right (x~800, y~520)
+    pitch_chain = [
+        (f, 350.0 + (f - 40) * 35.0, 400.0 + (f - 40) * 10.0, 0.75, 12.0)
+        for f in range(40, 53)
+    ]
+    # Dugout / spectator movement
+    noise_chain = [
+        (f, 150.0 + (f % 2), 650.0 + (f % 2), 0.35, 15.0)
+        for f in range(10, 40)
+    ]
+
+    best = tracker._select_best_flight_chain(
+        [noise_chain, pitch_chain],
+        width=width,
+        height=height,
+        total_frames=90,
+        perspective="auto"
+    )
+    assert best == pitch_chain, "Broadcast pitch delivery across field must be selected"
+    assert tracker.last_resolved_perspective == "broadcast", "Perspective must resolve to broadcast"

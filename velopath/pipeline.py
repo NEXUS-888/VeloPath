@@ -167,8 +167,9 @@ def process_pitch_video(
         )
     else:
         resolved_perspective = getattr(tracker, "last_resolved_perspective", None) or perspective
+        plate_pt_hint = (trajectory_points[-1].x, trajectory_points[-1].y) if trajectory_points else None
         strike_zone = StrikeZone.get_preset_zone(
-            width, height, view_type=resolved_perspective
+            width, height, view_type=resolved_perspective, plate_point=plate_pt_hint
         )
 
     # 3. Physically Grounded Timing & Aerodynamic Velocity
