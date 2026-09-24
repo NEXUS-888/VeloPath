@@ -1006,8 +1006,6 @@ class PitchTracker:
                 # In broadcast centerfield view: ball travels across the field tunnel from pitcher to catcher
                 if disp < (width * 0.10) or abs(dx) < (width * 0.05):
                     return 0.00001
-                if abs(dy) < (height * 0.03):
-                    return 0.00001
 
             # Path straightness
             path_len = 0.0
