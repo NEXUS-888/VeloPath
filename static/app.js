@@ -81,6 +81,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const cleanVideoCheckbox = document.getElementById('cleanVideoCheckbox');
     const trimPitchCheckbox = document.getElementById('trimPitchCheckbox');
 
+    // Tracking Mode Elements
+    const modeBaseballBtn = document.getElementById('modeBaseballBtn');
+    const modeNormalBtn = document.getElementById('modeNormalBtn');
+    const modeStatusPill = document.getElementById('modeStatusPill');
+    const modeDescriptionText = document.getElementById('modeDescriptionText');
+    const normalModeNotice = document.getElementById('normalModeNotice');
+
     // Modals
     const helpModal = document.getElementById('helpModal');
     const helpModalBtn = document.getElementById('helpModalBtn');
@@ -92,6 +99,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let isHudVisible = true;
     let activeGraphicStyle = 'statcast_cyan';
     let activePerspective = 'auto';
+    let activeTrackingMode = 'baseball'; // 'baseball' or 'normal'
 
     // Active Strike Zone Geometry in native video pixels
     let strikeZone = {
@@ -100,6 +108,39 @@ document.addEventListener('DOMContentLoaded', () => {
         w: 180,
         h: 210
     };
+
+    function setTrackingMode(mode) {
+        activeTrackingMode = mode;
+        if (mode === 'normal') {
+            if (modeNormalBtn) modeNormalBtn.className = 'mode-btn px-3 py-1.5 rounded-lg text-xs font-bold bg-pitchcyan text-black shadow-sm transition flex items-center gap-1.5';
+            if (modeBaseballBtn) modeBaseballBtn.className = 'mode-btn px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:text-white transition flex items-center gap-1.5';
+            if (modeStatusPill) {
+                modeStatusPill.textContent = '🎯 Normal Video Mode';
+                modeStatusPill.className = 'text-[10px] font-semibold text-pitchcyan px-2 py-0.5 rounded-full bg-pitchcyan/10 border border-pitchcyan/20';
+            }
+            if (modeDescriptionText) {
+                modeDescriptionText.textContent = 'Tracks full-frame ball throws, high arcs, tosses, and catches in any direction without baseball constraints.';
+            }
+            if (normalModeNotice) normalModeNotice.classList.remove('hidden');
+            if (interactiveZoneBox) interactiveZoneBox.classList.add('hidden');
+        } else {
+            if (modeBaseballBtn) modeBaseballBtn.className = 'mode-btn px-3 py-1.5 rounded-lg text-xs font-bold bg-pitchcyan text-black shadow-sm transition flex items-center gap-1.5';
+            if (modeNormalBtn) modeNormalBtn.className = 'mode-btn px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:text-white transition flex items-center gap-1.5';
+            if (modeStatusPill) {
+                modeStatusPill.textContent = '⚾ Baseball ABS Mode';
+                modeStatusPill.className = 'text-[10px] font-semibold text-pitchcyan px-2 py-0.5 rounded-full bg-pitchcyan/10 border border-pitchcyan/20';
+            }
+            if (modeDescriptionText) {
+                modeDescriptionText.textContent = 'Pitch tunnel gating, 60.5ft ABS strike zone, and Statcast 3D streamline.';
+            }
+            if (normalModeNotice) normalModeNotice.classList.add('hidden');
+            if (interactiveZoneBox && isZoneCalibrating) interactiveZoneBox.classList.remove('hidden');
+        }
+        if (window.lucide) window.lucide.createIcons();
+    }
+
+    if (modeBaseballBtn) modeBaseballBtn.addEventListener('click', () => setTrackingMode('baseball'));
+    if (modeNormalBtn) modeNormalBtn.addEventListener('click', () => setTrackingMode('normal'));
 
     // 3. Check System Hardware Acceleration
     async function checkHardwareHealth() {
@@ -341,13 +382,32 @@ document.addEventListener('DOMContentLoaded', () => {
             sideCallBadge.className = 'text-xs font-black uppercase px-2.5 py-0.5 rounded-md bg-slate-500/20 text-slate-300 border border-slate-500/40';
             sideZoneCallStatus.textContent = text;
             sideZoneCallStatus.className = 'font-black text-slate-300 uppercase text-[11px]';
-            dockCallStatus.textContent = text;
-            dockCallStatus.className = 'text-[10px] font-black px-2 py-0.5 rounded uppercase bg-slate-500/20 text-slate-300 border border-slate-500/30';
+            if (dockCallStatus) {
+                dockCallStatus.textContent = text;
+                dockCallStatus.className = 'text-[10px] font-black px-2 py-0.5 rounded uppercase bg-slate-500/20 text-slate-300 border border-slate-500/30';
+            }
             interactiveZoneBox.classList.remove('is-strike', 'is-ball');
             overlayCallText.textContent = text;
             overlayCallText.className = 'text-xs font-black tracking-wider uppercase px-2 py-0.5 rounded bg-slate-500/20 text-slate-300 border border-slate-500/40';
             return;
         }
+
+        if (activeTrackingMode === 'normal' || currentPitchData?.mode === 'normal') {
+            const text = 'TRACKED';
+            sideCallBadge.textContent = text;
+            sideCallBadge.className = 'text-xs font-black uppercase px-2.5 py-0.5 rounded-md bg-pitchcyan/20 text-pitchcyan border border-pitchcyan/40';
+            sideZoneCallStatus.textContent = 'BALL TRACKED';
+            sideZoneCallStatus.className = 'font-black text-pitchcyan uppercase text-[11px]';
+            if (dockCallStatus) {
+                dockCallStatus.textContent = 'TRACKED';
+                dockCallStatus.className = 'text-[10px] font-black px-2 py-0.5 rounded uppercase bg-pitchcyan/20 text-pitchcyan border border-pitchcyan/30';
+            }
+            interactiveZoneBox.classList.remove('is-strike', 'is-ball');
+            overlayCallText.textContent = text;
+            overlayCallText.className = 'text-xs font-black tracking-wider uppercase px-2 py-0.5 rounded bg-pitchcyan/20 text-pitchcyan border border-pitchcyan/40';
+            return;
+        }
+
         const text = isStrike ? 'STRIKE' : 'BALL';
         
         // Sidebar Badge
@@ -606,11 +666,16 @@ document.addEventListener('DOMContentLoaded', () => {
         horzBreakVal.textContent = (data.horz_break_in >= 0 ? '+' : '') + data.horz_break_in.toFixed(1);
         
         const pitchDetected = data.pitch_detected ?? Boolean(data.trajectory?.length);
-        const tag = pitchDetected ? (data.pitch_tag || 'Pitch') : 'No Pitch';
+        const isNormal = activeTrackingMode === 'normal' || data.mode === 'normal';
+        const tag = pitchDetected ? (data.pitch_tag || (isNormal ? 'Ball Flight' : 'Pitch')) : 'No Pitch';
         sidePitchType.textContent = tag;
 
+        if (data.mode) {
+            setTrackingMode(data.mode);
+        }
+
         // On-Video Glassmorphism Overlay
-        overlayPitchNum.textContent = `PITCH #${data.pitch_number || 1}`;
+        overlayPitchNum.textContent = isNormal ? 'BALL FLIGHT' : `PITCH #${data.pitch_number || 1}`;
         overlayPitchTag.textContent = tag;
         overlayVelocityVal.textContent = data.velocity_mph.toFixed(1);
         
@@ -623,13 +688,15 @@ document.addEventListener('DOMContentLoaded', () => {
         updateCallState(data.is_strike, pitchDetected);
 
         // Synchronize Strike Zone
-        if (data.strike_zone) {
+        if (data.strike_zone && data.show_strike_zone !== false && activeTrackingMode !== 'normal') {
             const cx = (data.strike_zone.x_min + data.strike_zone.x_max) / 2.0;
             const cy = (data.strike_zone.y_min + data.strike_zone.y_max) / 2.0;
             const w = data.strike_zone.x_max - data.strike_zone.x_min;
             const h = data.strike_zone.y_max - data.strike_zone.y_min;
             strikeZone = { cx, cy, w, h };
             syncInteractiveBox();
+        } else if (interactiveZoneBox) {
+            interactiveZoneBox.classList.add('hidden');
         }
 
         // Switch video source to rendered result
@@ -672,6 +739,7 @@ document.addEventListener('DOMContentLoaded', () => {
             pitch_number: currentPitchData.pitch_number || 1,
             trim_to_pitch: trimPitch,
             hud_style: hudStyle,
+            mode: activeTrackingMode,
         };
 
         try {
@@ -702,7 +770,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // 16. Upload & Process Video Workflow
     async function uploadAndProcessVideo(file) {
         loadingOverlay.classList.remove('hidden');
-        loadingStatusText.textContent = 'Tracking Pitch Trajectory & Speed...';
+        loadingStatusText.textContent = activeTrackingMode === 'normal' 
+            ? 'Tracking Ball Trajectory & Motion (~3-5s)...' 
+            : 'Tracking Pitch Trajectory & Speed...';
 
         const formData = new FormData();
         formData.append('file', file);
@@ -713,6 +783,7 @@ document.addEventListener('DOMContentLoaded', () => {
         formData.append('perspective', activePerspective);
         formData.append('trim_to_pitch', trimPitchCheckbox?.checked ?? false);
         formData.append('hud_style', cleanVideoCheckbox?.checked ? 'none' : 'minimal_badge');
+        formData.append('mode', activeTrackingMode);
 
         try {
             const response = await fetch('/api/process', {
