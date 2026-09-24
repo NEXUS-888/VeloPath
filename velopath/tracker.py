@@ -640,21 +640,13 @@ class PitchTracker:
                     converted_pts.append(TrajectoryPoint(frame_idx=int(p[0]), x=float(p[1]), y=float(p[2]), conf=float(p[3]), radius=max(4.0, float(p[4]) / 2.0)))
             detected_points = converted_pts
 
-        # In behind-catcher view, filter out sky/clouds and trim pre-release upward hand swing and post-catch glove motion
+        # 1. Trim pre-release windup (ball still held in pitcher's hand before release)
+        detected_points = self._trim_pre_release_windup(detected_points, resolved_perspective, width, height)
+
+        # 2. Trim post-catch / post-arrival motion once ball arrives at plate/catcher
         if resolved_perspective in ["behind_plate", "behind_catcher"]:
             detected_points = [p for p in detected_points if p.y >= (height * 0.18)]
             if len(detected_points) >= 4:
-                # 1. Trim pre-release windup (pitcher hand moving upward before ball is released)
-                for i in range(min(4, len(detected_points) - 1)):
-                    p_a = detected_points[i]
-                    p_b = detected_points[i + 1]
-                    dt = p_b.frame_idx - p_a.frame_idx
-                    dy = p_b.y - p_a.y
-                    if dt >= 3 and dy < (-35.0 * (height / 1080.0)):
-                        detected_points = detected_points[i + 1:]
-                        break
-
-                # 2. Trim post-catch catcher glove motion once ball arrives at plate/catcher
                 trim_idx = None
                 scale_val = max(1.0, width / 1280.0)
                 for i in range(len(detected_points) - 1):
@@ -666,6 +658,22 @@ class PitchTracker:
                         dy = p_next.y - p_curr.y
                         dx = p_next.x - p_curr.x
                         if dy < (-10.0 * (height / 1080.0)) or (dy > (14.0 * (height / 720.0)) and dy > 1.8 * abs(dx)) or (speed < 4.0 * scale_val and dt >= 2):
+                            trim_idx = i + 1
+                            break
+                if trim_idx is not None and trim_idx >= 3:
+                    detected_points = detected_points[:trim_idx]
+        elif resolved_perspective in ["behind_pitcher"]:
+            if len(detected_points) >= 4:
+                trim_idx = None
+                scale_val = max(1.0, width / 1280.0)
+                for i in range(len(detected_points) - 1):
+                    p_curr = detected_points[i]
+                    p_next = detected_points[i + 1]
+                    if p_curr.y <= (height * 0.50):
+                        dt = max(1, p_next.frame_idx - p_curr.frame_idx)
+                        dy = p_next.y - p_curr.y
+                        speed = np.hypot(p_next.x - p_curr.x, p_next.y - p_curr.y) / float(dt)
+                        if dy > (5.0 * scale_val) or speed < (4.0 * scale_val and dt >= 2):
                             trim_idx = i + 1
                             break
                 if trim_idx is not None and trim_idx >= 3:
@@ -687,7 +695,7 @@ class PitchTracker:
                         dt = max(1, p_next.frame_idx - p_curr.frame_idx)
                         dx = p_next.x - p_curr.x
                         step_speed = np.hypot(p_next.x - p_curr.x, p_next.y - p_curr.y) / float(dt)
-                        if p_curr.x >= (width * 0.62) or dx < (-5.0 * scale_val) or step_speed < (peak_speed * 0.65):
+                        if p_curr.x >= (width * 0.85) or dx < (-5.0 * scale_val) or step_speed < (peak_speed * 0.40):
                             trim_idx = i + 1
                             break
                 if trim_idx is not None and trim_idx >= 4:
@@ -705,6 +713,76 @@ class PitchTracker:
 
         self.last_resolved_perspective = resolved_perspective
         return [], fps, (width, height)
+
+    def _trim_pre_release_windup(
+        self,
+        points: List[TrajectoryPoint],
+        perspective: str,
+        width: int,
+        height: int
+    ) -> List[TrajectoryPoint]:
+        """
+        Trims pre-release ball-in-hand windup and arm cocking motion so the
+        trajectory starts at the exact moment the ball is released into free flight.
+        """
+        if len(points) < 5 or perspective in ["normal", "general"]:
+            return points
+
+        # Dominant flight direction vector from late-flight segment (approaching plate/target)
+        mid_idx = max(1, len(points) // 2)
+        end_p = points[-1]
+        mid_p = points[mid_idx]
+        f_dx = end_p.x - mid_p.x
+        f_dy = end_p.y - mid_p.y
+        f_dist = np.hypot(f_dx, f_dy)
+        if f_dist < 1e-4:
+            return points
+        u_x, u_y = f_dx / f_dist, f_dy / f_dist
+
+        speeds = []
+        proj_speeds = []
+        for i in range(len(points) - 1):
+            dt = max(1, points[i+1].frame_idx - points[i].frame_idx)
+            dx = points[i+1].x - points[i].x
+            dy = points[i+1].y - points[i].y
+            s = np.hypot(dx, dy) / float(dt)
+            p_s = (dx * u_x + dy * u_y) / float(dt)
+            speeds.append(s)
+            proj_speeds.append(p_s)
+
+        peak_speed = max(speeds) if speeds else 1.0
+
+        release_idx = 0
+        max_search = min(len(points) - 3, int(round(len(points) * 0.60)))
+        for i in range(max_search):
+            dt = max(1, points[i+1].frame_idx - points[i].frame_idx)
+            dx = points[i+1].x - points[i].x
+            dy = points[i+1].y - points[i].y
+            s = speeds[i]
+            p_s = proj_speeds[i]
+            cos_ang = p_s / max(1e-5, s)
+
+            is_reverse = p_s <= 0 or cos_ang < 0.60
+            is_too_slow = s < (0.50 * peak_speed)
+
+            if perspective == "broadcast" and dx < 0:
+                is_reverse = True
+            elif perspective in ["behind_pitcher"] and dy > 0:
+                is_reverse = True
+            elif perspective in ["behind_catcher", "behind_plate"] and dy < 0:
+                is_reverse = True
+
+            if is_reverse or is_too_slow:
+                release_idx = i + 1
+            else:
+                if i + 1 < len(proj_speeds) and proj_speeds[i+1] > (0.60 * peak_speed):
+                    break
+                else:
+                    release_idx = i + 1
+
+        if 0 < release_idx <= len(points) - 3:
+            return points[release_idx:]
+        return points
 
     def _link_points_into_chains(
         self,
