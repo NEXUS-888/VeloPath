@@ -71,3 +71,14 @@ def test_stream_video_ranges(client, tmp_path):
     finally:
         if os.path.exists(test_filepath):
             os.remove(test_filepath)
+
+
+@pytest.mark.parametrize("name", ["README.md", "AGENTS.md", "..%5CREADME.md", "..%5C..%5CREADME.md", "%2E%2E%5CREADME.md"])
+def test_stream_video_cannot_escape_outputs(client, name):
+    res = client.get(f"/api/video/{name}")
+    assert res.status_code == 404
+
+
+def test_rerender_rejects_unsafe_video_id(client):
+    res = client.post("/api/rerender", json={"video_id": "", "trajectory": []})
+    assert res.status_code == 404

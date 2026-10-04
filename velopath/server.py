@@ -168,7 +168,9 @@ async def rerender_existing_pitch(payload: RerenderPayload):
         if not os.path.exists(input_video):
             input_video = os.path.join(BASE_DIR, "WhatsApp Video 2026-09-02 at 11.24.19 PM.mp4")
     else:
-        matches = [f for f in os.listdir(UPLOADS_DIR) if f.startswith(f"input_{payload.video_id}")]
+        if not payload.video_id.isalnum():
+            raise HTTPException(status_code=404, detail="Original video not found for re-render.")
+        matches = [f for f in os.listdir(UPLOADS_DIR) if f.startswith(f"input_{payload.video_id}.")]
         if not matches:
             raise HTTPException(status_code=404, detail="Original video not found for re-render.")
         input_video = os.path.join(UPLOADS_DIR, matches[0])
@@ -205,10 +207,8 @@ async def stream_video(filename: str, request: Request):
     """
     HTTP Range-streaming video endpoint for smooth seeking and scrubbing in HTML5 video players.
     """
-    file_path = os.path.join(OUTPUTS_DIR, filename)
-    if not os.path.exists(file_path):
-        file_path = os.path.join(BASE_DIR, filename)
-    if not os.path.exists(file_path):
+    file_path = os.path.join(OUTPUTS_DIR, os.path.basename(filename.replace("\\", "/")))
+    if not filename.endswith(".mp4") or not os.path.isfile(file_path):
         raise HTTPException(status_code=404, detail="Video not found.")
 
     file_size = os.path.getsize(file_path)
