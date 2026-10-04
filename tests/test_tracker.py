@@ -1,5 +1,5 @@
 import pytest
-from velopath.tracker import smooth_trajectory, interpolate_missing_frames, TrajectoryPoint
+from velopath.tracker import interpolate_missing_frames, select_flight, TrajectoryPoint
 
 
 def test_interpolate_missing_frames():
@@ -15,17 +15,6 @@ def test_interpolate_missing_frames():
     assert interpolated[1].frame_idx == 1
     assert pytest.approx(interpolated[1].x, 0.5) == 110.0
     assert pytest.approx(interpolated[1].y, 0.5) == 210.0
-
-
-def test_smooth_trajectory_reduces_jitter():
-    """Smoothing should reduce noise while preserving trajectory trend."""
-    raw_points = [
-        TrajectoryPoint(frame_idx=i, x=100.0 + i * 10 + (2.0 if i % 2 == 0 else -2.0), y=200.0 + i * 5, conf=0.8)
-        for i in range(10)
-    ]
-    smoothed = smooth_trajectory(raw_points)
-    assert len(smoothed) == len(raw_points)
-    assert smoothed[0].frame_idx == raw_points[0].frame_idx
 
 
 def test_detect_color_motion_ball_synthetic():
@@ -55,29 +44,6 @@ def test_detect_color_motion_ball_synthetic():
     assert pytest.approx(cx, abs=5.0) == 210.0
     assert pytest.approx(cy, abs=5.0) == 210.0
     assert r > 2.0
-
-
-def test_extrapolate_measured_flight():
-    """Verify ballistic extrapolation extends measured points to the plate."""
-    from velopath.tracker import PitchTracker
-
-    tracker = PitchTracker()
-    measured = [
-        TrajectoryPoint(frame_idx=10, x=300.0, y=400.0, conf=0.8),
-        TrajectoryPoint(frame_idx=11, x=302.0, y=380.0, conf=0.8),
-        TrajectoryPoint(frame_idx=12, x=304.0, y=360.0, conf=0.8),
-    ]
-    extrapolated = tracker._extrapolate_measured_flight(
-        points=measured,
-        perspective="behind_pitcher",
-        width=500,
-        height=800,
-        fps=30.0
-    )
-    assert len(extrapolated) > len(measured)
-    # Should travel upward into target
-    assert extrapolated[-1].y < measured[-1].y
-    assert extrapolated[-1].frame_idx > measured[-1].frame_idx
 
 
 def test_detect_red_cricket_ball_synthetic():
@@ -160,276 +126,6 @@ def test_detect_orange_red_leather_ball_hue_extended():
     assert pytest.approx(cy, abs=6.0) == 220.0
 
 
-def test_stationary_noise_rejected_for_ballistic_flight():
-    """Verify chain scoring prioritizes fast ballistic delivery over long stationary spectator noise."""
-    import numpy as np
-    from velopath.tracker import PitchTracker
-
-    tracker = PitchTracker()
-    width, height = 3840, 2160
-
-    # Synthetic long spectator chain (30 frames, but only 30px total movement = 1px/frame)
-    spectator_chain = [
-        (f, 1650.0 + (f % 3), 1050.0 + (f % 2), 0.55, 20.0)
-        for f in range(10, 40)
-    ]
-
-    # Synthetic fast pitch flight chain (8 frames, 600px displacement = 75px/frame)
-    pitch_chain = [
-        (f, 1800.0 + (f - 45) * 60.0, 900.0 + (f - 45) * 45.0, 0.60, 25.0)
-        for f in range(45, 53)
-    ]
-
-    best = tracker._select_best_flight_chain(
-        [spectator_chain, pitch_chain],
-        width=width,
-        height=height,
-        total_frames=100,
-        perspective="behind_plate"
-    )
-    assert best == pitch_chain, "Ballistic pitch delivery must be chosen over stationary spectator noise"
-
-
-def test_extrapolate_single_point_behind_pitcher():
-    """Verify single point detection provides forward velocity rather than static stall."""
-    from velopath.tracker import PitchTracker
-
-    tracker = PitchTracker()
-    single_point = [TrajectoryPoint(frame_idx=10, x=500.0, y=300.0, conf=0.8)]
-    extrapolated = tracker._extrapolate_measured_flight(
-        points=single_point,
-        perspective="behind_pitcher",
-        width=1000,
-        height=1000,
-        fps=30.0
-    )
-    assert len(extrapolated) > 1
-    # Ball should progress downward/forward toward target
-    assert extrapolated[-1].y > single_point[0].y
-    assert extrapolated[-1].frame_idx > single_point[0].frame_idx
-
-
-def test_link_points_into_chains_adaptive_gap():
-    """Verify points with frame gap up to max_dt are linked into a single continuous chain."""
-    from velopath.tracker import PitchTracker
-
-    tracker = PitchTracker()
-    # Points with a 5-frame gap (e.g. frame 10 and 15)
-    pts = [
-        TrajectoryPoint(frame_idx=10, x=500.0, y=300.0, conf=0.8),
-        TrajectoryPoint(frame_idx=15, x=520.0, y=350.0, conf=0.8),
-        TrajectoryPoint(frame_idx=16, x=525.0, y=360.0, conf=0.8),
-    ]
-    chains = tracker._link_points_into_chains(
-        pts, width=1280, height=720, perspective="behind_pitcher", max_dt=8
-    )
-    assert len(chains) == 1
-    assert len(chains[0]) == 3
-
-
-def test_upward_motion_rejected_by_physics_guard():
-    """Verify upward batter swing or cloud drift is rejected in behind-catcher view."""
-    from velopath.tracker import PitchTracker
-
-    tracker = PitchTracker()
-    width, height = 1920, 1080
-
-    # Upward swing into sky (y decreases from 700 to 200 in behind_catcher view)
-    upward_noise = [
-        (f, 960.0 + (f - 20) * 5.0, 700.0 - (f - 20) * 35.0, 0.60, 15.0)
-        for f in range(20, 30)
-    ]
-    best = tracker._select_best_flight_chain(
-        [upward_noise],
-        width=width,
-        height=height,
-        total_frames=100,
-        perspective="behind_catcher"
-    )
-    assert best is None, "Upward motion into the sky must be rejected in behind-catcher view"
-
-
-def test_lateral_motion_is_not_a_pitch():
-    """A moving object must progress toward the plate, not merely cross the frame."""
-    from velopath.tracker import PitchTracker
-
-    tracker = PitchTracker()
-    lateral_noise = [
-        (f, 30.0 + (f - 10) * 12.0, 740.0, 0.65, 12.0)
-        for f in range(10, 18)
-    ]
-
-    assert tracker._select_best_flight_chain(
-        [lateral_noise], width=384, height=848, total_frames=180,
-        perspective="auto", fps=60.0,
-    ) is None
-
-
-def test_behind_pitcher_flight_chain_selected():
-    """Verify ball traveling from foreground pitcher to distance plate (dy < 0) is selected in behind-pitcher view."""
-    from velopath.tracker import PitchTracker
-
-    tracker = PitchTracker()
-    width, height = 1920, 1080
-
-    # Real pitch traveling away from camera toward home plate in distance (y from 800 to 450)
-    pitch_chain = [
-        (f, 960.0 + (f - 30) * 5.0, 800.0 - (f - 30) * 25.0, 0.70, 15.0)
-        for f in range(30, 44)
-    ]
-    # Stationary noise / spectator movement
-    noise_chain = [
-        (f, 400.0 + (f % 2), 600.0 + (f % 2), 0.40, 15.0)
-        for f in range(10, 40)
-    ]
-
-    best = tracker._select_best_flight_chain(
-        [noise_chain, pitch_chain],
-        width=width,
-        height=height,
-        total_frames=100,
-        perspective="behind_pitcher"
-    )
-    assert best == pitch_chain, "Behind-pitcher pitch delivery towards plate must be selected"
-
-
-def test_behind_catcher_flight_chain_selected():
-    """Verify ball traveling from pitcher to plate is correctly selected over stationary noise."""
-    from velopath.tracker import PitchTracker
-
-    tracker = PitchTracker()
-    width, height = 3840, 2160
-
-    # Behind-catcher pitch: travels from pitcher (y ~ 500) forward to catcher (y ~ 1200)
-    pitch_chain = [
-        (f, 1800.0 + (f - 40) * 30.0, 600.0 + (f - 40) * 50.0, 0.70, 18.0)
-        for f in range(40, 52)
-    ]
-    # Stationary fielder/batter shuffling
-    noise_chain = [
-        (f, 600.0 + (f % 3), 1100.0 + (f % 2), 0.40, 20.0)
-        for f in range(10, 40)
-    ]
-
-    best = tracker._select_best_flight_chain(
-        [noise_chain, pitch_chain],
-        width=width,
-        height=height,
-        total_frames=120,
-        perspective="behind_catcher"
-    )
-    assert best == pitch_chain, "Behind-catcher forward pitch delivery must be selected"
-
-
-def test_no_pitch_detected_guard():
-    """Verify empty/stationary noise chains return None from flight chain selection."""
-    from velopath.tracker import PitchTracker
-
-    tracker = PitchTracker()
-    width, height = 1920, 1080
-
-    # Empty noise chains: slow camera drift or windup movement
-    drift_noise = [
-        (f, 500.0 + (f % 2), 500.0 + (f % 2), 0.3, 10.0)
-        for f in range(10, 20)
-    ]
-    best = tracker._select_best_flight_chain(
-        [drift_noise],
-        width=width,
-        height=height,
-        total_frames=100,
-        perspective="auto"
-    )
-    assert best is None, "Drift noise must return None to prevent hallucinated pitch"
-
-
-def test_broadcast_flight_chain_selected():
-    """Verify diagonal pitch delivery from mound across to home plate is selected in broadcast view."""
-    from velopath.tracker import PitchTracker
-
-    tracker = PitchTracker()
-    width, height = 1280, 720
-
-    # Broadcast centerfield pitch: pitcher on left (x~350, y~400) to catcher on right (x~800, y~520)
-    pitch_chain = [
-        (f, 350.0 + (f - 40) * 35.0, 400.0 + (f - 40) * 10.0, 0.75, 12.0)
-        for f in range(40, 53)
-    ]
-    # Dugout / spectator movement
-    noise_chain = [
-        (f, 150.0 + (f % 2), 650.0 + (f % 2), 0.35, 15.0)
-        for f in range(10, 40)
-    ]
-
-    best = tracker._select_best_flight_chain(
-        [noise_chain, pitch_chain],
-        width=width,
-        height=height,
-        total_frames=90,
-        perspective="auto"
-    )
-    assert best == pitch_chain, "Broadcast pitch delivery across field must be selected"
-    assert tracker.last_resolved_perspective == "broadcast", "Perspective must resolve to broadcast"
-
-
-def test_normal_mode_tracks_arbitrary_trajectory():
-    """
-    Verify that casual throws (e.g. right-to-left throw across the frame or upward toss)
-    are accepted and scored in normal mode, even though baseball pitch tunnels would reject them.
-    """
-    from velopath.tracker import PitchTracker
-
-    tracker = PitchTracker()
-    width, height = 1280, 720
-
-    # Right-to-left throw: x decreases from 1000 to 300, slight downward drop y: 300 -> 360
-    casual_throw = [
-        (f, 1000.0 - (f - 20) * 50.0, 300.0 + (f - 20) * 4.0, 0.7, 12.0)
-        for f in range(20, 34)
-    ]
-    # Stationary noise
-    noise_chain = [
-        (f, 200.0, 200.0, 0.4, 10.0)
-        for f in range(5, 15)
-    ]
-
-    # In baseball mode ("auto"), right-to-left throw with dx < -15 and small dy is rejected
-    best_baseball = tracker._select_best_flight_chain(
-        [noise_chain, casual_throw],
-        width=width,
-        height=height,
-        total_frames=60,
-        perspective="auto"
-    )
-    assert best_baseball is None, "Baseball mode should reject pure right-to-left casual throw"
-
-    # In normal mode ("normal"), casual throw is successfully recognized
-    best_normal = tracker._select_best_flight_chain(
-        [noise_chain, casual_throw],
-        width=width,
-        height=height,
-        total_frames=60,
-        perspective="normal"
-    )
-    assert best_normal == casual_throw, "Normal mode must track casual right-to-left throw"
-    assert tracker.last_resolved_perspective == "normal"
-
-
-def test_normal_mode_links_reverse_direction_points():
-    """Verify points moving in reverse or upward direction are linked when perspective='normal'."""
-    from velopath.tracker import PitchTracker
-
-    tracker = PitchTracker()
-    points = [
-        (10, 800.0, 400.0, 0.8),
-        (11, 750.0, 380.0, 0.8),  # dx = -50, dy = -20 (upward and leftward)
-        (12, 700.0, 360.0, 0.8),
-    ]
-    chains = tracker._link_points_into_chains(points, width=1280, height=720, perspective="normal")
-    assert len(chains) == 1
-    assert len(chains[0]) == 3
-
-
 def test_pipeline_normal_mode_disables_strike_zone(tmp_path):
     """Verify process_pitch_video with mode='normal' produces BALL TRACKED and disables strike zone overlay."""
     import cv2
@@ -463,3 +159,48 @@ def test_pipeline_normal_mode_disables_strike_zone(tmp_path):
     assert res["call"] == "BALL TRACKED"
     assert res["pitch_tag"] == "Ball Flight"
 
+
+def _frames(hits):
+    return [int(h[0]) for h in hits] if hits else None
+
+
+def test_select_flight_prefers_moving_ball_over_stationary_noise():
+    noise = [(f, 1650.0 + (f % 3), 1050.0 + (f % 2), 0.55, 20.0) for f in range(10, 40)]
+    pitch = [(f, 1800.0 + (f - 45) * 60.0, 900.0 + (f - 45) * 45.0, 0.6, 25.0) for f in range(45, 53)]
+    assert _frames(select_flight(noise + pitch, 3840, 2160)) == list(range(45, 53))
+
+
+def test_select_flight_returns_none_for_drift_only():
+    drift = [(f, 500.0 + (f % 2), 500.0 + (f % 2), 0.3, 10.0) for f in range(10, 20)]
+    assert select_flight(drift, 1920, 1080) is None
+
+
+def test_select_flight_false_hand_hit_does_not_steal_release():
+    """Regression for Test !.mp4: a pitcher-hand hit 3 frames before release must not cut the flight start."""
+    flight = [(f, 348 + (f - 51) * 31.0, 297 - (f - 51) * 9.0 + 0.9 * (f - 51) ** 2, 0.8, 12.0) for f in range(51, 66)]
+    hand = [(48, 434.0, 342.0, 0.71, 14.0), (45, 335.0, 367.0, 0.62, 14.0), (46, 358.0, 385.0, 0.36, 14.0)]
+    assert _frames(select_flight(sorted(hand + flight), 1280, 720)) == list(range(51, 66))
+
+
+def test_select_flight_any_direction():
+    """Camera-angle agnostic: right-to-left and upward flights are flights too."""
+    leftward = [(f, 1000.0 - (f - 20) * 50.0, 300.0 + (f - 20) * 4.0, 0.7, 12.0) for f in range(20, 34)]
+    upward = [(f, 960.0 + (f - 20) * 5.0, 700.0 - (f - 20) * 35.0, 0.6, 15.0) for f in range(20, 30)]
+    assert _frames(select_flight(leftward, 1280, 720)) == list(range(20, 34))
+    assert _frames(select_flight(upward, 1920, 1080)) == list(range(20, 30))
+
+
+def test_select_flight_picks_on_path_hit_per_frame():
+    flight = [(f, 100.0 + f * 20.0, 300.0 + f * 5.0, 0.5, 10.0) for f in range(10)]
+    clutter = [(f, 900.0, 100.0 + f * 3.0, 0.9, 10.0) for f in range(10)]
+    got = select_flight(flight + clutter, 1280, 720)
+    assert _frames(got) == list(range(10)) and all(h[1] < 400 for h in got)
+
+
+
+def test_select_flight_accepts_ball_flying_away_from_camera():
+    """Behind-pitcher phone view: the ball barely moves in the image but shrinks 31px -> 14px."""
+    away = [(f, 545.0 - (f - 55), 756.0 - 3.0 * (f - 55) + 0.1 * (f - 55) ** 2, 0.7, 31.0 - 0.6 * (f - 55))
+            for f in range(55, 84)]
+    logo = [(f, 300.0 + (f % 2), 300.0, 0.8, 20.0) for f in range(0, 60)]
+    assert _frames(select_flight(logo + away, 1080, 1920)) == list(range(55, 84))

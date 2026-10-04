@@ -6,7 +6,7 @@ import os
 import cv2
 import numpy as np
 
-from velopath.tracker import PitchTracker, TrajectoryPoint, interpolate_missing_frames, smooth_trajectory
+from velopath.tracker import PitchTracker, TrajectoryPoint
 from velopath.physics import (
     calculate_velocity_mph,
     calculate_velocity_kmh,
@@ -305,62 +305,6 @@ def process_pitch_video(
             for p in trajectory_points
         ]
     }
-
-
-def _detect_motion_arc(
-    video_path: str,
-    total_frames: int,
-    width: int,
-    height: int
-) -> list:
-    """
-    Fallback optical motion arc detector to track the ball when YOLO confidence
-    drops due to low lighting or motion blur.
-    """
-    cap = cv2.VideoCapture(video_path)
-    prev = None
-    motion_pts = []
-    f_idx = 0
-
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            break
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        gray = cv2.GaussianBlur(gray, (9, 9), 0)
-
-        if prev is not None:
-            diff = cv2.absdiff(prev, gray)
-            _, thresh = cv2.threshold(diff, 28, 255, cv2.THRESH_BINARY)
-            contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-            
-            # Filter contours by small circular ball size scaled to resolution
-            scale_area = max(0.5, (width * height) / (1280.0 * 720.0))
-            candidates = []
-            for c in contours:
-                area = cv2.contourArea(c)
-                if (15.0 * scale_area) <= area <= (1200.0 * scale_area):
-                    (x, y), radius = cv2.minEnclosingCircle(c)
-                    candidates.append((x, y, radius, area))
-
-            if candidates:
-                # Pick candidate closest to previous motion point if available
-                if motion_pts:
-                    last_pt = motion_pts[-1]
-                    best = min(candidates, key=lambda c: (c[0] - last_pt.x)**2 + (c[1] - last_pt.y)**2)
-                else:
-                    best = max(candidates, key=lambda c: c[3])
-                motion_pts.append(
-                    TrajectoryPoint(frame_idx=f_idx, x=float(best[0]), y=float(best[1]), conf=0.7)
-                )
-        prev = gray
-        f_idx += 1
-
-    cap.release()
-    if len(motion_pts) >= 4:
-        smoothed = smooth_trajectory(motion_pts)
-        return smoothed
-    return []
 
 
 def rerender_pitch(
