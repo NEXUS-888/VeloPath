@@ -1,7 +1,7 @@
 """
 FastAPI Server for VeloPath AI: Web-based pitch tracking, speed analysis & strike zone umpiring.
 """
-from typing import Optional
+from typing import Annotated, List, Optional
 import os
 import shutil
 import uuid
@@ -10,7 +10,7 @@ from fastapi import FastAPI, File, UploadFile, Form, HTTPException, Request, Res
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, StreamingResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 
 from velopath.pipeline import process_pitch_video, rerender_pitch
 
@@ -107,6 +107,16 @@ class RerenderPayload(BaseModel):
     hud_style: str = "none"
     mode: str = "baseball"
     show_strike_zone: Optional[bool] = None
+    # two front corners of home plate tapped on the rendered video, [[x, y], [x, y]]
+    plate_corners: Optional[List[Annotated[List[float], Field(min_length=2, max_length=2)]]] = Field(None, min_length=2, max_length=2)
+    batter_height_in: float = Field(72.0, ge=36.0, le=96.0)
+
+    @field_validator("plate_corners")
+    @classmethod
+    def corners_apart(cls, v):
+        if v and v[0] == v[1]:
+            raise ValueError("plate corners must be two different points")
+        return v
 
 
 @app.post("/api/process")
@@ -193,6 +203,8 @@ def rerender_existing_pitch(payload: RerenderPayload):
             hud_style=payload.hud_style,
             mode=payload.mode,
             show_strike_zone=payload.show_strike_zone,
+            plate_corners=payload.plate_corners,
+            batter_height_in=payload.batter_height_in,
         )
         result["video_id"] = payload.video_id
         result["video_url"] = f"/api/video/{output_filename}"

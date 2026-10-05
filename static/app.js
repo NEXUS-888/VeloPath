@@ -55,6 +55,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const zoneCalibrationDock = document.getElementById('zoneCalibrationDock');
     const dockApplyBtn = document.getElementById('dockApplyBtn');
     const dockCancelBtn = document.getElementById('dockCancelBtn');
+    const dockTapPlateBtn = document.getElementById('dockTapPlateBtn');
+    const dockBatterHeight = document.getElementById('dockBatterHeight');
     const videoZoneToggleBtn = document.getElementById('videoZoneToggleBtn');
     const videoStage = document.getElementById('videoStage');
     const zoneZoomToggleBtn = document.getElementById('zoneZoomToggleBtn');
@@ -640,6 +642,13 @@ document.addEventListener('DOMContentLoaded', () => {
         // Hero Velocity (Release & Plate with Drag)
         heroVelocityVal.textContent = data.velocity_mph.toFixed(1);
         heroVelocityKmh.textContent = (data.velocity_kmh || (data.velocity_mph * 1.60934)).toFixed(1);
+        // flight time is whole frames: one frame of error moves speed by this much
+        const heroVelocityPm = document.getElementById('heroVelocityPm');
+        if (heroVelocityPm) {
+            const lowFps = (data.fps || 30) < 60;
+            heroVelocityPm.textContent = data.velocity_pm_mph ? `±${data.velocity_pm_mph.toFixed(1)}${lowFps ? ' · low fps' : ''}` : '';
+            heroVelocityPm.title = lowFps ? 'Timing is counted in whole frames. Record at 60+ fps (240 fps slow-mo is best) for a tighter speed.' : 'One frame of timing error';
+        }
 
         const plateMph = data.plate_velocity_mph || (data.velocity_mph * 0.95);
         const plateKmh = data.plate_velocity_kmh || (plateMph * 1.60934);
@@ -662,8 +671,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Kinematics Micro-Cards
         flightTimeVal.textContent = Math.round(data.flight_time_ms);
-        vertBreakVal.textContent = (data.vert_break_in >= 0 ? '+' : '') + data.vert_break_in.toFixed(1);
-        horzBreakVal.textContent = (data.horz_break_in >= 0 ? '+' : '') + data.horz_break_in.toFixed(1);
+        // break inches need a real scale: unknown until the zone is calibrated
+        const brk = (v) => data.zone_calibrated === false ? '—' : (v >= 0 ? '+' : '') + v.toFixed(1);
+        vertBreakVal.textContent = brk(data.vert_break_in);
+        horzBreakVal.textContent = brk(data.horz_break_in);
         
         const pitchDetected = data.pitch_detected ?? Boolean(data.trajectory?.length);
         const isNormal = activeTrackingMode === 'normal' || data.mode === 'normal';
@@ -710,7 +721,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // 15. Fast Re-Render (~1s) on Strike Zone or Visual Change
-    async function applyStrikeZoneChanges() {
+    async function applyStrikeZoneChanges(extra = {}) {
         if (!currentPitchData?.trajectory?.length) {
             alert('A verified pitch is required before calibrating the strike zone.');
             return;
@@ -740,6 +751,8 @@ document.addEventListener('DOMContentLoaded', () => {
             trim_to_pitch: trimPitch,
             hud_style: hudStyle,
             mode: activeTrackingMode,
+            batter_height_in: Number(dockBatterHeight.value) || 72,
+            ...extra,
         };
 
         try {
@@ -764,8 +777,46 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    applyZoneChangesBtn.addEventListener('click', applyStrikeZoneChanges);
-    dockApplyBtn.addEventListener('click', applyStrikeZoneChanges);
+    applyZoneChangesBtn.addEventListener('click', () => applyStrikeZoneChanges());
+    dockApplyBtn.addEventListener('click', () => applyStrikeZoneChanges());
+
+    // 15b. Plate calibration: tap the plate's two front corners (17in apart) on a paused frame
+    let plateTaps = null;  // null = not tapping; else corners collected so far, in rendered-video pixels
+
+    function clientToVideoPx(e) {
+        const r = video.getBoundingClientRect();  // includes the zoom transform; video is object-fit: contain
+        const { vidW, vidH } = getVideoRenderedGeometry();
+        const s = Math.min(r.width / vidW, r.height / vidH);
+        const x = (e.clientX - (r.left + (r.width - vidW * s) / 2)) / s;
+        const y = (e.clientY - (r.top + (r.height - vidH * s) / 2)) / s;
+        return (x >= 0 && x <= vidW && y >= 0 && y <= vidH) ? [x, y] : null;
+    }
+
+    dockCancelBtn.addEventListener('click', () => {
+        plateTaps = null;
+        dockTapPlateBtn.textContent = 'Tap plate';
+    });
+
+    dockTapPlateBtn.addEventListener('click', () => {
+        video.pause();
+        plateTaps = [];
+        dockTapPlateBtn.textContent = 'Tap left front corner';
+    });
+
+    videoDropZone.addEventListener('click', (e) => {
+        if (plateTaps === null || e.target.closest('button') || e.target.closest('#zoneCalibrationDock')) return;
+        const pt = clientToVideoPx(e);
+        if (!pt) return;
+        plateTaps.push(pt);
+        if (plateTaps.length < 2) {
+            dockTapPlateBtn.textContent = 'Tap right front corner';
+            return;
+        }
+        const corners = plateTaps;
+        plateTaps = null;
+        dockTapPlateBtn.textContent = 'Tap plate';
+        applyStrikeZoneChanges({ plate_corners: corners });
+    });
 
     // 16. Upload & Process Video Workflow
     async function uploadAndProcessVideo(file) {

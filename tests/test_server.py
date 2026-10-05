@@ -112,3 +112,10 @@ def test_processing_does_not_block_other_requests(monkeypatch, tmp_path):
             release.set()
             upload.join()
     assert elapsed < 2
+
+
+@pytest.mark.parametrize("extra", [{"plate_corners": [[1, 2]]}, {"plate_corners": [[1, 2], [1, 2]]},
+                                   {"plate_corners": [[1, 2], [3]]}, {"batter_height_in": 5}])
+def test_rerender_rejects_bad_calibration(client, extra):
+    res = client.post("/api/rerender", json={"video_id": "sample", "trajectory": [{"frame": 1, "x": 1, "y": 1}], **extra})
+    assert res.status_code == 422

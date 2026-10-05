@@ -52,6 +52,18 @@ class StrikeZone:
         return cls(x_min=x_min, y_min=y_min, x_max=x_max, y_max=y_max)
 
     @classmethod
+    def from_plate_corners(
+        cls,
+        corner_a: Tuple[float, float],
+        corner_b: Tuple[float, float],
+        batter_height_inches: float = 72.0,
+    ) -> "StrikeZone":
+        """Zone over home plate from its two front corners as tapped on a frame (17in apart sets the scale)."""
+        (ax, ay), (bx, by) = corner_a, corner_b
+        ppi = ((bx - ax) ** 2 + (by - ay) ** 2) ** 0.5 / PLATE_WIDTH_IN
+        return cls.from_batter_height(batter_height_inches, (ax + bx) / 2.0, (ay + by) / 2.0, pixels_per_inch=ppi)
+
+    @classmethod
     def get_preset_zone(
         cls,
         width: int,

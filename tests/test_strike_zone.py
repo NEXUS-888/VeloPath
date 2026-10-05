@@ -43,3 +43,11 @@ def test_ball_radius_defaults_to_baseball_size_at_zone_scale():
     assert evaluate_pitch((100 - 14, 300), zone).is_strike is True
     assert evaluate_pitch((100 - 15, 300), zone).is_strike is False
     assert evaluate_pitch((185, 300), zone).dist_to_center_in == 0.0
+
+
+def test_zone_from_plate_front_corners():
+    """Plate front edge is 17in: corners 34px apart -> 2 px/in; zone spans 27%-53.5% of batter height above it."""
+    zone = StrikeZone.from_plate_corners((303, 300), (337, 300), batter_height_inches=72.0)
+    assert (zone.x_min, zone.x_max) == pytest.approx((303, 337))
+    assert zone.y_max == pytest.approx(300 - 0.27 * 72 * 2)
+    assert zone.y_min == pytest.approx(300 - 0.535 * 72 * 2)

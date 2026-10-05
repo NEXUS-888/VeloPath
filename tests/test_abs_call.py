@@ -135,3 +135,42 @@ def test_pipeline_reuses_one_tracker_across_videos(blank_video, tmp_path):
     finally:
         pipeline.get_tracker.cache_clear()
     assert len(built) == 1
+
+
+def test_rerender_with_plate_taps_builds_zone_in_ui_pixels(tmp_path):
+    """User taps the plate's front corners on the rendered (downscaled) video: zone comes back in the same
+    pixels, calibrated, and the call is made against it."""
+    path = str(tmp_path / "hd.mp4")
+    out = cv2.VideoWriter(path, cv2.VideoWriter_fourcc(*"mp4v"), 30, (1920, 1080))
+    for _ in range(30):
+        out.write(np.zeros((1080, 1920, 3), dtype=np.uint8))
+    out.release()
+    # rendered at 1280x720; corners 34px apart there -> zone x 303..337, y ~223..261 (72in batter)
+    traj = [{"frame": 5 + i, "x": 40 + 20 * i, "y": 200 + 3 * i} for i in range(15)]  # ends (320, 242)
+    res = rerender_pitch(path, str(tmp_path / "re.mp4"), traj, 60.5, None, max_dimension=1280,
+                         plate_corners=[[303, 300], [337, 300]], batter_height_in=72.0)
+    assert res["zone_calibrated"] is True
+    z = res["strike_zone"]
+    assert (z["x_min"], z["x_max"]) == pytest.approx((303, 337), abs=0.2)
+    assert z["y_max"] == pytest.approx(300 - 0.27 * 72 * 2, abs=0.2)
+    assert res["call"] == "STRIKE"
+
+
+def test_break_is_measured_in_calibrated_zone_inches(blank_video, tmp_path):
+    """Break inches come from the zone's scale (17in wide), so a zone twice as wide halves them."""
+    traj = [{"frame": 5 + i, "x": 40 + 20 * i, "y": 200 + 0.4 * i * i} for i in range(15)]
+    narrow = rerender_pitch(blank_video, str(tmp_path / "a.mp4"), traj, 60.5,
+                            {"x_min": 300, "y_min": 200, "x_max": 334, "y_max": 260}, max_dimension=None)
+    wide = rerender_pitch(blank_video, str(tmp_path / "b.mp4"), traj, 60.5,
+                          {"x_min": 300, "y_min": 200, "x_max": 368, "y_max": 260}, max_dimension=None)
+    assert narrow["vert_break_in"] != 0
+    assert wide["vert_break_in"] == pytest.approx(narrow["vert_break_in"] / 2, abs=0.11)
+
+
+def test_speed_reports_one_frame_timing_uncertainty(blank_video, tmp_path):
+    """Flight time is counted in whole frames, so one frame of error moves speed by ~speed/elapsed_frames."""
+    traj = [{"frame": 5 + i, "x": 40 + 20 * i, "y": 200} for i in range(15)]  # 14 frames elapsed
+    res = rerender_pitch(blank_video, str(tmp_path / "u.mp4"), traj, 60.5, None, max_dimension=None)
+    assert res["velocity_pm_mph"] == pytest.approx(res["velocity_mph"] / 14, abs=0.05)
+    res = run(blank_video, tmp_path, flight(320, 240), None)
+    assert res["velocity_pm_mph"] == pytest.approx(res["velocity_mph"] / 14, abs=0.05)

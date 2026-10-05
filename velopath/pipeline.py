@@ -219,7 +219,7 @@ def process_pitch_video(
 
     # 4. Pitch Movement & Break
     coords = [(p.x, p.y) for p in trajectory_points]
-    px_per_in = max(0.5, (height * 0.15) / 17.0)
+    px_per_in = strike_zone.width / PLATE_WIDTH_IN  # zone is 17in wide: calibrated zone -> real inches
     horz_break_in, vert_break_in = calculate_pitch_break(coords, pixels_per_inch=px_per_in)
 
     pitch_tag = "Ball Flight" if is_normal_mode else classify_pitch_type(velocity_mph, vert_break_in, horz_break_in)
@@ -256,6 +256,7 @@ def process_pitch_video(
         "show_strike_zone": show_strike_zone,
         "pitch_number": pitch_number,
         "velocity_mph": velocity_mph,
+        "velocity_pm_mph": round(velocity_mph / elapsed_frames, 1),  # +-1 frame of whole-frame timing
         "velocity_kmh": velocity_kmh,
         "plate_velocity_mph": plate_velocity_mph,
         "plate_velocity_kmh": plate_velocity_kmh,
@@ -310,6 +311,8 @@ def rerender_pitch(
     max_dimension: Optional[int] = 1920,
     mode: str = "baseball",
     show_strike_zone: Optional[bool] = None,
+    plate_corners: Optional[list] = None,
+    batter_height_in: float = BATTER_HEIGHT_IN,
 ) -> dict:
     """
     Fast re-render using existing tracked trajectory and updated strike zone or graphic theme.
@@ -334,8 +337,11 @@ def rerender_pitch(
     if show_strike_zone is None:
         show_strike_zone = not is_normal_mode
 
-    zone_calibrated = bool(custom_strike_zone)
-    if custom_strike_zone:
+    zone_calibrated = bool(plate_corners or custom_strike_zone)
+    if plate_corners:  # user tapped the plate's front corners on the rendered video
+        (ax, ay), (bx, by) = plate_corners
+        strike_zone = StrikeZone.from_plate_corners((ax / sx, ay / sy), (bx / sx, by / sy), batter_height_in)
+    elif custom_strike_zone:
         strike_zone = StrikeZone(
             x_min=float(custom_strike_zone["x_min"]) / sx,
             y_min=float(custom_strike_zone["y_min"]) / sy,
@@ -367,7 +373,7 @@ def rerender_pitch(
     flight_time_ms = vel_data["flight_time_ms"]
 
     coords = [(p.x, p.y) for p in pts]
-    px_per_in = max(0.5, (height * 0.15) / 17.0)
+    px_per_in = strike_zone.width / PLATE_WIDTH_IN  # zone is 17in wide: calibrated zone -> real inches
     horz_break_in, vert_break_in = calculate_pitch_break(coords, pixels_per_inch=px_per_in)
 
     pitch_tag = "Ball Flight" if is_normal_mode else classify_pitch_type(velocity_mph, vert_break_in, horz_break_in)
@@ -399,6 +405,7 @@ def rerender_pitch(
         "mode": "normal" if is_normal_mode else "baseball",
         "show_strike_zone": show_strike_zone,
         "velocity_mph": velocity_mph,
+        "velocity_pm_mph": round(velocity_mph / elapsed_frames, 1),  # +-1 frame of whole-frame timing
         "velocity_kmh": velocity_kmh,
         "plate_velocity_mph": plate_velocity_mph,
         "plate_velocity_kmh": plate_velocity_kmh,
