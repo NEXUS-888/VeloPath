@@ -883,7 +883,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await response.json();
             updateTelemetry(data);
             const took = document.getElementById('processingTimeVal');
-            if (took && data.processing_time_s != null) took.textContent = `Processed in ${data.processing_time_s.toFixed(1)}s`;
+            if (took && data.processing_time_s != null) took.textContent = `Processed in ${data.processing_time_s.toFixed(1)}s on ${data.compute || 'this computer'}`;
         } catch (error) {
             alert(`Error: ${error.message}`);
         } finally {

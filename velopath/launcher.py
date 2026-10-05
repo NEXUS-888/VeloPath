@@ -164,7 +164,10 @@ def main():
 
     print(f"[*] Model Weights:       {model_path}")
     print(f"[*] Compute Device:      {device_name}")
-    
+    # friend's GPU worker: connect_remote prints whether it is used; the tracker connects again on first upload
+    from velopath.remote_gpu import connect_remote
+    connect_remote(os.path.join(repo_root, "gpu_worker.json"))
+
     local_ip = get_local_ip()
     print("\n" + "-" * 60)
     print(f"  Web Interface (Local):   http://localhost:{active_port}")

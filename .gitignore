@@ -13,6 +13,8 @@ ENV/
 
 # Large Model Weights & 3rd-Party Clones
 BaseballCV/
+gpu_worker.json
+worker/key.txt
 *.pt
 *.onnx
 *.weights
@@ -45,3 +47,4 @@ Thumbs.db
 # Presentations
 PPT/
 proofs/
+velopath_gpu_worker.zip

@@ -103,6 +103,8 @@ def process_pitch_video(
         )
         resolved_perspective = getattr(tracker, "last_resolved_perspective", None) or perspective
         plate = getattr(tracker, "last_plate", None)
+        gpu = getattr(getattr(tracker, "model", None), "gpu_name", None)
+        compute = f"{gpu} (GPU worker)" if gpu and not tracker.model.using_fallback else "this computer"
 
     cap = cv2.VideoCapture(input_video_path)
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -133,6 +135,7 @@ def process_pitch_video(
         report("Done", 1.0)
         return {
             "pitch_detected": False,
+            "compute": compute,
             "mode": "normal" if is_normal_mode else "baseball",
             "show_strike_zone": show_strike_zone,
             "pitch_number": pitch_number,
@@ -261,6 +264,7 @@ def process_pitch_video(
     report("Done", 1.0)
     return {
         "pitch_detected": True,
+        "compute": compute,
         "mode": "normal" if is_normal_mode else "baseball",
         "show_strike_zone": show_strike_zone,
         "pitch_number": pitch_number,
