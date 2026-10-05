@@ -3,7 +3,9 @@ FastAPI Server for VeloPath AI: Web-based pitch tracking, speed analysis & strik
 """
 from typing import Annotated, List, Optional
 import os
+import re
 import shutil
+import time
 import uuid
 import json
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException, Request, Response, status
@@ -33,6 +35,8 @@ os.makedirs(OUTPUTS_DIR, exist_ok=True)
 os.makedirs(UPLOADS_DIR, exist_ok=True)
 
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+PROGRESS = {}  # job_id -> {"stage", "pct", "started"} while /api/process runs; polled by the UI
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -131,8 +135,13 @@ def process_uploaded_video(
     trim_to_pitch: bool = Form(False),
     hud_style: str = Form("none"),
     mode: str = Form("baseball"),
+    job_id: Optional[str] = Form(None),
 ):
-    """Accepts an uploaded pitch video and returns Pitch Lab metrics and rendered video."""
+    """Accepts an uploaded pitch video and returns Pitch Lab metrics and rendered video.
+    Optional client-chosen job_id lets the UI poll /api/progress/{job_id} meanwhile."""
+    if job_id is not None and not re.fullmatch(r"[A-Za-z0-9]{1,32}", job_id):
+        raise HTTPException(status_code=422, detail="job_id must be 1-32 letters or digits.")
+    started = time.monotonic()
     file_id = str(uuid.uuid4())[:8]
     ext = os.path.splitext(file.filename)[1] or ".mp4"
     saved_input = os.path.join(UPLOADS_DIR, f"input_{file_id}{ext}")
@@ -149,6 +158,10 @@ def process_uploaded_video(
         except Exception:
             zone_dict = None
 
+    progress = None
+    if job_id:
+        PROGRESS[job_id] = {"stage": "Queued", "pct": 0.0, "started": started}
+        progress = lambda stage, pct: PROGRESS[job_id].update(stage=stage, pct=pct)  # noqa: E731
     try:
         result = process_pitch_video(
             input_video_path=saved_input,
@@ -162,12 +175,25 @@ def process_uploaded_video(
             trim_to_pitch=trim_to_pitch,
             hud_style=hud_style,
             mode=mode,
+            progress=progress,
         )
         result["video_id"] = file_id
         result["video_url"] = f"/api/video/{output_filename}"
+        result["processing_time_s"] = round(time.monotonic() - started, 1)
         return JSONResponse(result)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Processing failed: {str(e)}")
+    finally:
+        PROGRESS.pop(job_id, None)
+
+
+@app.get("/api/progress/{job_id}")
+def job_progress(job_id: str):
+    """Stage, percent and elapsed seconds of a running /api/process job."""
+    job = PROGRESS.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="No running job with that id.")
+    return {"stage": job["stage"], "pct": round(100 * job["pct"]), "elapsed_s": round(time.monotonic() - job["started"], 1)}
 
 
 @app.post("/api/rerender")

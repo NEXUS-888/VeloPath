@@ -1,7 +1,7 @@
 """
 End-to-end processing pipeline: Tracks ball, calculates speed, tests strike zone, and renders video.
 """
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Callable
 import functools
 import os
 import threading
@@ -71,6 +71,7 @@ def process_pitch_video(
     hud_style: str = "none",
     max_dimension: Optional[int] = 1920,
     mode: str = "baseball",
+    progress: Optional[Callable[[str, float], None]] = None,
 ) -> Dict[str, Any]:
     """
     Complete end-to-end Pitch Lab analysis:
@@ -87,7 +88,10 @@ def process_pitch_video(
     renderer = PitchRenderer(graphic_style=graphic_style)
 
     # 1. Track ball throughout video
+    report = progress or (lambda stage, pct: None)  # (stage, 0..1) for the UI's progress screen
+    report("Queued", 0.0)  # another upload may hold the tracker
     with _TRACK_LOCK:
+        report("Tracking ball", 0.0)
         tracker = get_tracker()
         trajectory_points, fps, (width, height) = tracker.track_video(
             input_video_path,
@@ -95,6 +99,7 @@ def process_pitch_video(
             ball_type=ball_type,
             perspective=perspective,
             mode=mode,
+            progress_callback=lambda frac: report("Tracking ball", 0.85 * frac),
         )
         resolved_perspective = getattr(tracker, "last_resolved_perspective", None) or perspective
         plate = getattr(tracker, "last_plate", None)
@@ -106,6 +111,7 @@ def process_pitch_video(
     if not trajectory_points:
         # Clean No-Pitch handling (e.g. windup drill, truncated clip, or aborted take)
         os.makedirs(os.path.dirname(os.path.abspath(output_video_path)), exist_ok=True)
+        report("Rendering video", 0.85)
         out_w, out_h = renderer.render_complete_video(
             input_video_path=input_video_path,
             output_video_path=output_video_path,
@@ -124,6 +130,7 @@ def process_pitch_video(
             hud_style=hud_style,
             max_dimension=max_dimension,
         )
+        report("Done", 1.0)
         return {
             "pitch_detected": False,
             "mode": "normal" if is_normal_mode else "baseball",
@@ -228,6 +235,7 @@ def process_pitch_video(
 
     # 5. Render final Pitch Lab video
     os.makedirs(os.path.dirname(os.path.abspath(output_video_path)), exist_ok=True)
+    report("Rendering video", 0.85)
     out_w, out_h = renderer.render_complete_video(
         input_video_path=input_video_path,
         output_video_path=output_video_path,
@@ -250,6 +258,7 @@ def process_pitch_video(
     scale_x = out_w / float(width) if width > 0 else 1.0
     scale_y = out_h / float(height) if height > 0 else 1.0
 
+    report("Done", 1.0)
     return {
         "pitch_detected": True,
         "mode": "normal" if is_normal_mode else "baseball",

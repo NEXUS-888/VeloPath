@@ -473,6 +473,8 @@ class PitchTracker:
             # (every other frame) before trusting colour/motion, which latches onto arms and sleeves
             cap = cv2.VideoCapture(video_path)
             for f in range(total_frames):
+                if progress_callback:
+                    progress_callback(0.8 + 0.15 * f / float(max(1, total_frames)))
                 if f % 2 and cap.grab():
                     continue
                 ret, frame = cap.read()

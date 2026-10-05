@@ -819,11 +819,43 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // 16. Upload & Process Video Workflow
+    // Live progress while /api/process runs: elapsed ticks locally, stage/percent polled from the server
+    function startProgress(jobId) {
+        const bar = document.getElementById('loadingBar');
+        const timer = document.getElementById('loadingTimer');
+        document.getElementById('loadingProgress').classList.remove('hidden');
+        const t0 = performance.now();
+        let pct = 0;
+        const fmt = (s) => s >= 60 ? `${Math.floor(s / 60)}m ${String(Math.round(s % 60)).padStart(2, '0')}s` : `${s.toFixed(1)}s`;
+        const tick = setInterval(() => {
+            const elapsed = (performance.now() - t0) / 1000;
+            const eta = pct >= 5 && pct < 100 ? ` · ~${fmt(elapsed * (100 - pct) / pct)} left` : '';
+            timer.textContent = `${pct}% · ${fmt(elapsed)} elapsed${eta}`;
+        }, 200);
+        const poll = setInterval(async () => {
+            try {
+                const res = await fetch(`/api/progress/${jobId}`);
+                if (!res.ok) return;
+                const p = await res.json();
+                pct = p.pct;
+                bar.style.width = `${pct}%`;
+                loadingStatusText.textContent = `${p.stage}...`;
+            } catch (e) { /* server busy; next poll */ }
+        }, 1000);
+        return () => {
+            clearInterval(tick);
+            clearInterval(poll);
+            bar.style.width = '0%';
+            timer.textContent = '';
+            document.getElementById('loadingProgress').classList.add('hidden');
+        };
+    }
+
     async function uploadAndProcessVideo(file) {
         loadingOverlay.classList.remove('hidden');
-        loadingStatusText.textContent = activeTrackingMode === 'normal' 
-            ? 'Tracking Ball Trajectory & Motion (~3-5s)...' 
-            : 'Tracking Pitch Trajectory & Speed...';
+        loadingStatusText.textContent = 'Uploading...';
+        const jobId = Array.from(crypto.getRandomValues(new Uint8Array(8)), (b) => b.toString(16).padStart(2, '0')).join('');
+        const stopProgress = startProgress(jobId);
 
         const formData = new FormData();
         formData.append('file', file);
@@ -835,6 +867,7 @@ document.addEventListener('DOMContentLoaded', () => {
         formData.append('trim_to_pitch', trimPitchCheckbox?.checked ?? false);
         formData.append('hud_style', cleanVideoCheckbox?.checked ? 'none' : 'minimal_badge');
         formData.append('mode', activeTrackingMode);
+        formData.append('job_id', jobId);
 
         try {
             const response = await fetch('/api/process', {
@@ -849,9 +882,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const data = await response.json();
             updateTelemetry(data);
+            const took = document.getElementById('processingTimeVal');
+            if (took && data.processing_time_s != null) took.textContent = `Processed in ${data.processing_time_s.toFixed(1)}s`;
         } catch (error) {
             alert(`Error: ${error.message}`);
         } finally {
+            stopProgress();
             loadingOverlay.classList.add('hidden');
         }
     }
