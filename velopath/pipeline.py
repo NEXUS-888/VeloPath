@@ -19,7 +19,7 @@ from velopath.physics import (
     estimate_trajectory_coverage,
 )
 from velopath.strike_zone import StrikeZone, evaluate_pitch, PitchCallResult, PLATE_WIDTH_IN
-from velopath.renderer import PitchRenderer
+from velopath.renderer import PitchRenderer, output_size
 
 BATTER_HEIGHT_IN = 72.0  # ABS uses the batter's listed height; without it assume 6 ft
 _TRACK_LOCK = threading.Lock()  # YOLO predict isn't thread-safe and track_video leaves per-run state on the tracker
@@ -315,15 +315,19 @@ def rerender_pitch(
     Fast re-render using existing tracked trajectory and updated strike zone or graphic theme.
     Supports both Baseball Pitch Mode and Normal / Any Video Mode.
     """
-    pts = [
-        TrajectoryPoint(frame_idx=int(p["frame"]), x=float(p["x"]), y=float(p["y"]), conf=0.9)
-        for p in trajectory
-    ]
     cap = cv2.VideoCapture(input_video_path)
     fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     cap.release()
+
+    # The UI speaks the rendered video's pixels; work in source pixels like process_pitch_video
+    out_w, out_h = output_size(width, height, max_dimension)
+    sx, sy = out_w / float(width), out_h / float(height)
+    pts = [
+        TrajectoryPoint(frame_idx=int(p["frame"]), x=float(p["x"]) / sx, y=float(p["y"]) / sy, conf=0.9)
+        for p in trajectory
+    ]
 
     is_normal_mode = (mode or "baseball").lower().strip() in ["normal", "general"] or (perspective or "").lower().strip() in ["normal", "general"]
 
@@ -333,10 +337,10 @@ def rerender_pitch(
     zone_calibrated = bool(custom_strike_zone)
     if custom_strike_zone:
         strike_zone = StrikeZone(
-            x_min=float(custom_strike_zone["x_min"]),
-            y_min=float(custom_strike_zone["y_min"]),
-            x_max=float(custom_strike_zone["x_max"]),
-            y_max=float(custom_strike_zone["y_max"]),
+            x_min=float(custom_strike_zone["x_min"]) / sx,
+            y_min=float(custom_strike_zone["y_min"]) / sy,
+            x_max=float(custom_strike_zone["x_max"]) / sx,
+            y_max=float(custom_strike_zone["y_max"]) / sy,
         )
     else:
         strike_zone = StrikeZone.get_preset_zone(width, height, view_type="behind_catcher")
@@ -409,14 +413,14 @@ def rerender_pitch(
         "call": call_result.call,
         "zone_calibrated": zone_calibrated,
         "strike_zone": {
-            "x_min": round(strike_zone.x_min, 1),
-            "y_min": round(strike_zone.y_min, 1),
-            "x_max": round(strike_zone.x_max, 1),
-            "y_max": round(strike_zone.y_max, 1),
+            "x_min": round(strike_zone.x_min * sx, 1),
+            "y_min": round(strike_zone.y_min * sy, 1),
+            "x_max": round(strike_zone.x_max * sx, 1),
+            "y_max": round(strike_zone.y_max * sy, 1),
         },
         "plate_crossing": {
-            "x": round(plate_pt[0], 1),
-            "y": round(plate_pt[1], 1),
+            "x": round(plate_pt[0] * sx, 1),
+            "y": round(plate_pt[1] * sy, 1),
         },
         "graphic_style": graphic_style,
         "ball_type": ball_type,

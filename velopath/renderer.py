@@ -39,6 +39,15 @@ GRAPHIC_THEMES = {
 }
 
 
+
+def output_size(in_w: int, in_h: int, max_dimension: Optional[int]) -> Tuple[int, int]:
+    """Rendered frame size: source size, or scaled so the long side is max_dimension (even, for H.264)."""
+    if not max_dimension or max(in_w, in_h) <= max_dimension:
+        return in_w, in_h
+    scale = max_dimension / float(max(in_w, in_h))
+    out_w, out_h = int(round(in_w * scale)), int(round(in_h * scale))
+    return out_w - out_w % 2, out_h - out_h % 2
+
 class PitchRenderer:
     """
     Renders high-definition Statcast 3D trajectory streamline graphics,
@@ -472,45 +481,21 @@ class PitchRenderer:
         in_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         total_in_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
-        # Determine target output resolution
-        if max_dimension and max(in_w, in_h) > max_dimension:
-            scale = max_dimension / float(max(in_w, in_h))
-            out_w = int(round(in_w * scale))
-            out_h = int(round(in_h * scale))
-            out_w -= (out_w % 2)  # Ensure even dimensions for H.264
-            out_h -= (out_h % 2)
-        else:
-            scale = 1.0
-            out_w, out_h = in_w, in_h
+        # Overlays arrive in source pixels; map them onto the (possibly downscaled) output frame
+        out_w, out_h = output_size(in_w, in_h, max_dimension)
+        scale = out_w / float(in_w) if in_w > 0 else 1.0
+        scale_x, scale_y = scale, (out_h / float(in_h) if in_h > 0 else 1.0)
 
-        # Scale trajectory points and strike zone if downscaling
-        scale_x = out_w / float(in_w) if in_w > 0 else 1.0
-        scale_y = out_h / float(in_h) if in_h > 0 else 1.0
-
-        render_points = trajectory_points
-        if scale != 1.0 and trajectory_points:
-            # Auto-detect if coordinates are in input coordinate space
-            if any(p.x > out_w * 1.05 or p.y > out_h * 1.05 for p in trajectory_points):
-                render_points = [
-                    TrajectoryPoint(
-                        frame_idx=p.frame_idx,
-                        x=p.x * scale_x,
-                        y=p.y * scale_y,
-                        conf=p.conf,
-                        radius=p.radius * scale,
-                    )
-                    for p in trajectory_points
-                ]
-
-        render_sz = strike_zone
-        if scale != 1.0 and strike_zone:
-            if strike_zone.x_max > out_w * 1.05 or strike_zone.y_max > out_h * 1.05:
-                render_sz = StrikeZone(
-                    x_min=strike_zone.x_min * scale_x,
-                    y_min=strike_zone.y_min * scale_y,
-                    x_max=strike_zone.x_max * scale_x,
-                    y_max=strike_zone.y_max * scale_y,
-                )
+        render_points = [
+            TrajectoryPoint(frame_idx=p.frame_idx, x=p.x * scale_x, y=p.y * scale_y, conf=p.conf, radius=p.radius * scale)
+            for p in trajectory_points
+        ]
+        render_sz = strike_zone and StrikeZone(
+            x_min=strike_zone.x_min * scale_x,
+            y_min=strike_zone.y_min * scale_y,
+            x_max=strike_zone.x_max * scale_x,
+            y_max=strike_zone.y_max * scale_y,
+        )
 
         # Action-window trimming: if enabled, render active pitch + 0.4s lead-in/follow-through
         if trim_to_pitch and trajectory_points and len(trajectory_points) >= 2:

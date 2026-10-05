@@ -154,3 +154,47 @@ def test_render_complete_video_fallback_when_ffmpeg_fails(sample_video, tmp_path
     assert cap.isOpened()
     assert int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) == 30
     cap.release()
+
+
+def test_downscaled_render_maps_source_coords_even_inside_output_bounds(sample_video, tmp_path):
+    """Overlays always arrive in source pixels. A 1920x1080 point at (960, 500) rendered at 1280x720 must be
+    drawn at (640, 333) - it used to be left unscaled because it happened to fit inside the output frame."""
+    seen = {}
+
+    def ribbon(self, frame, points, frame_idx):
+        seen["pt"] = (points[0].x, points[0].y)
+        return frame
+
+    def zone(self, frame, sz, call_result=None):
+        seen["zone"] = (sz.x_min, sz.y_min, sz.x_max, sz.y_max)
+        return frame
+
+    pts = [TrajectoryPoint(frame_idx=f, x=960.0, y=500.0) for f in range(10, 20)]
+    with patch.object(PitchRenderer, "draw_glowing_ribbon", ribbon), patch.object(PitchRenderer, "draw_strike_zone", zone):
+        PitchRenderer().render_complete_video(
+            input_video_path=sample_video, output_video_path=str(tmp_path / "o.mp4"), trajectory_points=pts,
+            velocity_mph=90.0, vert_break_in=0.0, horz_break_in=0.0, max_dimension=1280,
+            strike_zone=StrikeZone(x_min=900, y_min=450, x_max=1020, y_max=600),
+        )
+    assert seen["pt"] == pytest.approx((640.0, 333.3), abs=0.5)
+    assert seen["zone"] == pytest.approx((600, 300, 680, 400), abs=0.5)
+
+
+def test_rerender_takes_and_returns_output_space_coords(sample_video, tmp_path):
+    """The UI works in the rendered video's pixels. Rerender must hand the renderer source pixels and
+    answer in output pixels again, so the zone the user drew comes back unchanged."""
+    from velopath.pipeline import rerender_pitch
+    seen = {}
+
+    def ribbon(self, frame, points, frame_idx):
+        seen["pt"] = (points[-1].x, points[-1].y)
+        return frame
+
+    traj = [{"frame": f, "x": 100.0 + 20 * (f - 10), "y": 300.0} for f in range(10, 20)]  # ends (280, 300)
+    zone = {"x_min": 260.0, "y_min": 280.0, "x_max": 300.0, "y_max": 330.0}
+    with patch.object(PitchRenderer, "draw_glowing_ribbon", ribbon):
+        res = rerender_pitch(sample_video, str(tmp_path / "re.mp4"), traj, 60.5, zone, max_dimension=1280)
+    assert seen["pt"] == pytest.approx((280.0, 300.0), abs=0.5)  # drawn where the user saw it
+    assert res["strike_zone"] == pytest.approx(zone, abs=0.2)
+    assert res["plate_crossing"] == pytest.approx({"x": 280.0, "y": 300.0}, abs=0.2)
+    assert res["call"] == "STRIKE"
