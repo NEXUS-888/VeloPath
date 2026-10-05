@@ -344,13 +344,13 @@ class PitchTracker:
         return [] if return_all else None
 
     def _yolo_hits(self, model, img, classes, imgsz: int, conf: float, ox: float = 0.0, oy: float = 0.0) -> List[tuple]:
-        """Returns (cx, cy, conf, width) for every ball box YOLO finds in img, in full-frame coordinates."""
+        """Returns (cx, cy, conf, width, cls) for every box YOLO finds in img, in full-frame coordinates."""
         kwargs = {"conf": conf, "verbose": False, "imgsz": imgsz, "device": self.device}
         if classes is not None:
             kwargs["classes"] = classes
         res = model.predict(img, **kwargs)[0].boxes
-        return [((b[0] + b[2]) / 2.0 + ox, (b[1] + b[3]) / 2.0 + oy, float(c), float(b[2] - b[0]))
-                for b, c in zip(res.xyxy.tolist(), res.conf.tolist())]
+        return [((b[0] + b[2]) / 2.0 + ox, (b[1] + b[3]) / 2.0 + oy, float(c), float(b[2] - b[0]), int(k))
+                for b, c, k in zip(res.xyxy.tolist(), res.conf.tolist(), res.cls.tolist())]
 
     def _refine_flight(self, video_path, model, classes, flight, width, height, total_frames, pad=6, win=320):
         """Re-detects the ball at native resolution in a small window around the fitted path,
@@ -373,7 +373,7 @@ class PitchTracker:
             px, py = float(np.polyval(cx, f)), float(np.polyval(cy, f))
             x1 = int(min(max(0, px - win / 2), max(0, width - win)))
             y1 = int(min(max(0, py - win / 2), max(0, height - win)))
-            near = [(np.hypot(x - px, y - py), x, y, c, w) for x, y, c, w in
+            near = [(np.hypot(x - px, y - py), x, y, c, w) for x, y, c, w, _ in
                     self._yolo_hits(model, frame[y1:y1 + win, x1:x1 + win], classes, win, 0.05, x1, y1)]
             near = [n for n in near if n[0] <= gate]
             if near:
@@ -410,10 +410,14 @@ class PitchTracker:
         is_normal = (mode or "baseball").lower().strip() in ["normal", "general"] or raw_persp in ["normal", "general"]
         model = self._get_model(is_normal)
         classes = self._get_target_classes(model, is_normal)
+        # home plate rides along in the ball scan for free; it anchors the strike zone (pipeline)
+        plate_cls = None if is_normal or model is None else next(
+            (int(k) for k, v in getattr(model, "names", {}).items() if str(v).lower() == "homeplate"), None)
+        scan_classes = classes + [plate_cls] if classes is not None and plate_cls is not None else classes
         scan_sz = 640  # full-frame scan only seeds the flight; _refine_flight restores native resolution
         stride = 1 if total_frames <= 300 else 2
 
-        yolo_hits, motion_hits = [], []
+        yolo_hits, motion_hits, plates = [], [], []
         prev, prev2 = None, None
         for f in range(total_frames):
             ret, frame = cap.read()
@@ -421,13 +425,19 @@ class PitchTracker:
                 break
             if f % stride == 0:
                 if model is not None:
-                    yolo_hits += [(f, x, y, c, w) for x, y, c, w in self._yolo_hits(model, frame, classes, scan_sz, conf_thresh)]
+                    for x, y, c, w, k in self._yolo_hits(model, frame, scan_classes, scan_sz, conf_thresh):
+                        if k == plate_cls:
+                            plates.append((x, y, w))
+                        else:
+                            yolo_hits.append((f, x, y, c, w))
                 motion_hits += [(f, x, y, c, 2.0 * r) for x, y, r, c in self.detect_color_motion_ball(
                     frame, prev, (0, width, 0, height), ball_type, prev2, return_all=True)]
                 prev2, prev = prev, frame
             if progress_callback:
                 progress_callback(0.8 * f / float(max(1, total_frames)))
         cap.release()
+        # (cx, cy, width) of the plate; a few hits required so one stray box can't place the zone
+        self.last_plate = tuple(float(v) for v in np.median(plates, axis=0)) if len(plates) >= 3 else None
 
         flight = select_flight(yolo_hits, width, height) or select_flight(motion_hits, width, height)
         if flight and model is not None:

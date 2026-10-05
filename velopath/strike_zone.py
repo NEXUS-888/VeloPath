@@ -4,6 +4,8 @@ Strike Zone calibration and Automated Ball-Strike (ABS) umpiring evaluation.
 from dataclasses import dataclass
 from typing import Tuple, Optional
 
+PLATE_WIDTH_IN = 17.0  # zone width == plate width, so a zone's pixel width sets its px/in scale
+BALL_RADIUS_IN = 1.45  # regulation baseball, 2.9in diameter
 
 @dataclass
 class StrikeZone:
@@ -36,7 +38,7 @@ class StrikeZone:
         Bottom: Hollow beneath the kneecap (~27% of height)
         Width: 17 inches across home plate.
         """
-        width_px = 17.0 * pixels_per_inch
+        width_px = PLATE_WIDTH_IN * pixels_per_inch
         zone_height_in = (0.535 - 0.270) * batter_height_inches
         height_px = zone_height_in * pixels_per_inch
 
@@ -55,44 +57,12 @@ class StrikeZone:
         width: int,
         height: int,
         view_type: str = "auto",
-        plate_point: Optional[Tuple[float, float]] = None
     ) -> "StrikeZone":
-        """
-        Returns calibrated strike zone for Broadcast or Mobile camera perspective.
-        Properly scaled to match regulation MLB home plate and batter strike zone.
-        If plate_point (x, y) is provided, dynamically anchors the strike zone over home plate.
-        """
+        """Returns a rough starting zone for a camera perspective (user drags it onto the plate)."""
         is_portrait = height > width
         aspect = width / float(height)
 
-        # 1. Dynamic anchoring if home plate crossing point is known
-        if plate_point is not None and view_type not in ["behind_plate", "behind_catcher"]:
-            px, py = plate_point
-            if (width * 0.05) <= px <= (width * 0.95) and (height * 0.05) <= py <= (height * 0.95):
-                if view_type == "behind_pitcher":
-                    zw = width * (0.20 if is_portrait else 0.14)
-                    zh = height * (0.14 if is_portrait else 0.18)
-                    cx = px
-                    cy = max(zh / 2.0, py - zh * 0.35)
-                    return cls(
-                        x_min=cx - (zw / 2.0),
-                        y_min=cy - (zh / 2.0),
-                        x_max=cx + (zw / 2.0),
-                        y_max=cy + (zh / 2.0)
-                    )
-                elif view_type == "broadcast":
-                    zw = width * 0.062
-                    zh = height * 0.116
-                    cx = px
-                    cy = max(zh / 2.0, py - zh * 0.45)
-                    return cls(
-                        x_min=cx - (zw / 2.0),
-                        y_min=cy - (zh / 2.0),
-                        x_max=cx + (zw / 2.0),
-                        y_max=cy + (zh / 2.0)
-                    )
-
-        # 2. Preset zones based on perspective
+        # Uncalibrated starting guess per perspective; the pipeline makes no call from it.
         if view_type in ["behind_plate", "behind_catcher"]:
             cx = width * 0.68
             cy = height * 0.58
@@ -156,15 +126,18 @@ class PitchCallResult:
 def evaluate_pitch(
     plate_cross_point: Tuple[float, float],
     strike_zone: StrikeZone,
-    ball_radius: float = 10.0,
-    pixels_per_inch: float = 2.5
+    ball_radius: Optional[float] = None,
 ) -> PitchCallResult:
     """
     Evaluates whether a pitch crossing the plate is a STRIKE or a BALL.
     According to official ABS rules: if ANY part of the baseball intersects
     the strike zone box (including the ball radius buffer), it is a STRIKE.
+    Scale comes from the zone itself (17in wide); ball_radius defaults to a baseball at that scale.
     """
     bx, by = plate_cross_point
+    pixels_per_inch = max(strike_zone.width, 1e-6) / PLATE_WIDTH_IN
+    if ball_radius is None:
+        ball_radius = BALL_RADIUS_IN * pixels_per_inch
 
     # Expanded zone by ball radius for full intersection check
     eff_x_min = strike_zone.x_min - ball_radius
@@ -179,7 +152,7 @@ def evaluate_pitch(
     center_x = (strike_zone.x_min + strike_zone.x_max) / 2.0
     center_y = (strike_zone.y_min + strike_zone.y_max) / 2.0
     dist_px = ((bx - center_x) ** 2 + (by - center_y) ** 2) ** 0.5
-    dist_in = round(float(dist_px / max(pixels_per_inch, 0.1)), 1)
+    dist_in = round(float(dist_px / pixels_per_inch), 1)
 
     return PitchCallResult(
         is_strike=is_strike,

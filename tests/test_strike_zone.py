@@ -34,3 +34,12 @@ def test_strike_zone_dynamic_dimensions():
     zone = StrikeZone.from_batter_height(batter_height_inches=72.0, home_plate_x=150, home_plate_y=400, pixels_per_inch=3.0)
     assert zone.y_max > zone.y_min
     assert zone.x_max > zone.x_min
+
+
+def test_ball_radius_defaults_to_baseball_size_at_zone_scale():
+    """Zone is 17in wide, so 170px -> 10 px/in; a baseball (r = 1.45in) is 14.5px.
+    Edge contact counts (ABS), anything beyond is a BALL."""
+    zone = StrikeZone(x_min=100, y_min=200, x_max=270, y_max=400)
+    assert evaluate_pitch((100 - 14, 300), zone).is_strike is True
+    assert evaluate_pitch((100 - 15, 300), zone).is_strike is False
+    assert evaluate_pitch((185, 300), zone).dist_to_center_in == 0.0

@@ -367,7 +367,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const px = currentPitchData.plate_crossing.x;
         const py = currentPitchData.plate_crossing.y;
-        const ballR = 14.0;
+        const ballR = 1.45 * strikeZone.w / 17.0;  // baseball radius at zone scale (zone = 17in wide)
 
         const isStrike = (px >= x_min - ballR) && (px <= x_max + ballR) &&
                          (py >= y_min - ballR) && (py <= y_max + ballR);
@@ -375,9 +375,9 @@ document.addEventListener('DOMContentLoaded', () => {
         updateCallState(isStrike);
     }
 
-    function updateCallState(isStrike, pitchDetected = true) {
-        if (!pitchDetected) {
-            const text = 'NO PITCH';
+    function updateCallState(isStrike, pitchDetected = true, zoneCalibrated = true) {
+        if (!pitchDetected || !zoneCalibrated) {
+            const text = pitchDetected ? 'SET ZONE' : 'NO PITCH';
             sideCallBadge.textContent = text;
             sideCallBadge.className = 'text-xs font-black uppercase px-2.5 py-0.5 rounded-md bg-slate-500/20 text-slate-300 border border-slate-500/40';
             sideZoneCallStatus.textContent = text;
@@ -685,7 +685,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         // Call State
-        updateCallState(data.is_strike, pitchDetected);
+        updateCallState(data.is_strike, pitchDetected, data.zone_calibrated !== false);
 
         // Synchronize Strike Zone
         if (data.strike_zone && data.show_strike_zone !== false && activeTrackingMode !== 'normal') {
