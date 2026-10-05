@@ -82,3 +82,33 @@ def test_stream_video_cannot_escape_outputs(client, name):
 def test_rerender_rejects_unsafe_video_id(client):
     res = client.post("/api/rerender", json={"video_id": "", "trajectory": []})
     assert res.status_code == 404
+
+
+def test_processing_does_not_block_other_requests(monkeypatch, tmp_path):
+    """Pipeline is minutes of blocking CPU work; it must not freeze the event loop (health, streaming).
+    `with TestClient` runs every request on one event loop, like the real server."""
+    import threading
+    import time
+    import velopath.server as server
+
+    started, release = threading.Event(), threading.Event()
+
+    def slow_pipeline(**kw):
+        started.set()
+        release.wait(10)
+        return {"pitch_detected": False}
+
+    monkeypatch.setattr(server, "process_pitch_video", slow_pipeline)
+    monkeypatch.setattr(server, "UPLOADS_DIR", str(tmp_path))
+    with TestClient(app) as client:
+        upload = threading.Thread(target=lambda: client.post("/api/process", files={"file": ("a.mp4", b"x")}))
+        upload.start()
+        try:
+            assert started.wait(5)
+            t0 = time.monotonic()
+            assert client.get("/api/health").status_code == 200
+            elapsed = time.monotonic() - t0
+        finally:
+            release.set()
+            upload.join()
+    assert elapsed < 2

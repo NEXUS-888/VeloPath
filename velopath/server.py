@@ -62,7 +62,7 @@ async def legacy_video_feed():
 
 
 @app.get("/api/sample")
-async def process_sample_pitch():
+def process_sample_pitch():
     """Processes or returns the cached pitch video in the workspace instantly."""
     meta_file = os.path.join(OUTPUTS_DIR, "velopath_sample_meta.json")
     out_file = os.path.join(OUTPUTS_DIR, "velopath_sample_result.mp4")
@@ -110,7 +110,7 @@ class RerenderPayload(BaseModel):
 
 
 @app.post("/api/process")
-async def process_uploaded_video(
+def process_uploaded_video(
     file: UploadFile = File(...),
     distance_ft: float = Form(60.5),
     pitch_number: int = Form(1),
@@ -161,7 +161,7 @@ async def process_uploaded_video(
 
 
 @app.post("/api/rerender")
-async def rerender_existing_pitch(payload: RerenderPayload):
+def rerender_existing_pitch(payload: RerenderPayload):
     """Fast re-render using existing trajectory and updated strike zone or graphic style."""
     if payload.video_id == "sample":
         input_video = os.path.join(BASE_DIR, "assets", "sample_pitch.mp4")

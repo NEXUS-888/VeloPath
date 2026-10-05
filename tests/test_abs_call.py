@@ -36,7 +36,7 @@ def run(video, tmp_path, pts, plate, **kw):
         def track_video(self, *a, **k):
             return pts, 30.0, (W, H)
 
-    with patch("velopath.pipeline.PitchTracker", FakeTracker):
+    with patch("velopath.pipeline.get_tracker", FakeTracker):
         return process_pitch_video(video, str(tmp_path / "out.mp4"), max_dimension=None, **kw)
 
 
@@ -111,3 +111,27 @@ def test_tracker_reports_home_plate_from_its_scan(blank_video):
     tracker.model, tracker.device, tracker._normal_model = _FakeModel(), "cpu", None
     tracker.track_video(blank_video)
     assert tracker.last_plate == pytest.approx(PLATE, abs=0.5)
+
+
+def test_pipeline_reuses_one_tracker_across_videos(blank_video, tmp_path):
+    """Loading YOLO per request costs seconds; the pipeline keeps one tracker."""
+    import velopath.pipeline as pipeline
+    built = []
+
+    class CountingTracker:
+        last_resolved_perspective, last_plate = "broadcast", None
+
+        def __init__(self):
+            built.append(self)
+
+        def track_video(self, *a, **k):
+            return flight(320, 240), 30.0, (W, H)
+
+    pipeline.get_tracker.cache_clear()
+    try:
+        with patch("velopath.pipeline.PitchTracker", CountingTracker):
+            for _ in range(2):
+                process_pitch_video(blank_video, str(tmp_path / "out.mp4"), max_dimension=None)
+    finally:
+        pipeline.get_tracker.cache_clear()
+    assert len(built) == 1

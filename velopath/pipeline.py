@@ -2,7 +2,9 @@
 End-to-end processing pipeline: Tracks ball, calculates speed, tests strike zone, and renders video.
 """
 from typing import Dict, Any, Optional, List
+import functools
 import os
+import threading
 import cv2
 import numpy as np
 
@@ -20,6 +22,13 @@ from velopath.strike_zone import StrikeZone, evaluate_pitch, PitchCallResult, PL
 from velopath.renderer import PitchRenderer
 
 BATTER_HEIGHT_IN = 72.0  # ABS uses the batter's listed height; without it assume 6 ft
+_TRACK_LOCK = threading.Lock()  # YOLO predict isn't thread-safe and track_video leaves per-run state on the tracker
+
+
+@functools.lru_cache(maxsize=1)
+def get_tracker() -> PitchTracker:
+    """One tracker per process: loading YOLO weights costs seconds per request."""
+    return PitchTracker()
 
 
 def judge_pitch(
@@ -75,17 +84,20 @@ def process_pitch_video(
     is_normal_mode = (mode or "baseball").lower().strip() in ["normal", "general"] or (perspective or "").lower().strip() in ["normal", "general"]
     show_strike_zone = not is_normal_mode
 
-    tracker = PitchTracker()
     renderer = PitchRenderer(graphic_style=graphic_style)
 
     # 1. Track ball throughout video
-    trajectory_points, fps, (width, height) = tracker.track_video(
-        input_video_path,
-        conf_thresh=conf_thresh,
-        ball_type=ball_type,
-        perspective=perspective,
-        mode=mode,
-    )
+    with _TRACK_LOCK:
+        tracker = get_tracker()
+        trajectory_points, fps, (width, height) = tracker.track_video(
+            input_video_path,
+            conf_thresh=conf_thresh,
+            ball_type=ball_type,
+            perspective=perspective,
+            mode=mode,
+        )
+        resolved_perspective = getattr(tracker, "last_resolved_perspective", None) or perspective
+        plate = getattr(tracker, "last_plate", None)
 
     cap = cv2.VideoCapture(input_video_path)
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -159,11 +171,9 @@ def process_pitch_video(
                 best_idx = i
         trajectory_points = trajectory_points[best_idx : best_idx + max_flight_frames]
 
-    resolved_perspective = getattr(tracker, "last_resolved_perspective", None) or perspective
     is_normal_mode = (mode or "baseball").lower().strip() in ["normal", "general"] or resolved_perspective in ["normal", "general"]
 
     # 2. Strike zone: user-set > detected home plate (17in wide sets px/in) > uncalibrated guess
-    plate = getattr(tracker, "last_plate", None)
     zone_calibrated = True
     if custom_strike_zone:
         strike_zone = StrikeZone(
