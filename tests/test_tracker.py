@@ -204,3 +204,119 @@ def test_select_flight_accepts_ball_flying_away_from_camera():
             for f in range(55, 84)]
     logo = [(f, 300.0 + (f % 2), 300.0, 0.8, 20.0) for f in range(0, 60)]
     assert _frames(select_flight(logo + away, 1080, 1920)) == list(range(55, 84))
+
+
+class _BlobYolo:
+    """Stands in for YOLO: reports the bright blob in whatever image it gets (full frame or refine window).
+    Full frames are only 'seen' at imgsz >= min_full_imgsz, mimicking a small ball lost to downscaling;
+    blobs under min_px pixels are never seen, mimicking a ball too small for the model at any scale."""
+    names = {0: "glove", 1: "homeplate", 2: "baseball", 3: "rubber"}
+
+    def __init__(self, full_shape, min_full_imgsz=0, min_px=0):
+        self.full_shape, self.min_full_imgsz, self.min_px = full_shape, min_full_imgsz, min_px
+
+    def predict(self, img, imgsz=640, classes=None, **kw):
+        import numpy as np
+
+        class Boxes:
+            def __init__(self, rows):
+                self.xyxy = np.array(rows, dtype=float).reshape(-1, 4)
+                self.conf = np.full(len(rows), 0.9)
+                self.cls = np.full(len(rows), 2.0)
+
+        ys, xs = np.nonzero(img[..., 0] > 100)
+        blind = img.shape[:2] == self.full_shape and imgsz < self.min_full_imgsz
+        rows = [] if blind or xs.size <= self.min_px else [(xs.min(), ys.min(), xs.max() + 1, ys.max() + 1)]
+        return [type("R", (), {"boxes": Boxes(rows)})()]
+
+
+def _write_clip(path, w, h, positions, n_frames, color=(255, 255, 255), r=5):
+    import cv2
+    import numpy as np
+    out = cv2.VideoWriter(path, cv2.VideoWriter_fourcc(*"mp4v"), 30, (w, h))
+    for f in range(n_frames):
+        frame = np.zeros((h, w, 3), dtype=np.uint8)
+        if f in positions:
+            cv2.circle(frame, tuple(int(round(v)) for v in positions[f]), r, color, -1)
+        out.write(frame)
+    out.release()
+
+
+def _bare_tracker(model):
+    from velopath.tracker import PitchTracker
+    t = PitchTracker.__new__(PitchTracker)
+    t.model, t.device, t._normal_model = model, "cpu", None
+    return t
+
+
+def test_refine_follows_bending_flight_to_the_catch_and_stops(tmp_path):
+    """Perspective bends the path (x decelerates): a quadratic through the first hits loses the ball after
+    a few frames. Refine must walk to the end of the flight (f34) and not onto the held ball after it."""
+    import math
+    path = {f: (40 + 300 * (1 - math.exp(-(f - 5) / 15)), 60 + 9 * (f - 5)) for f in range(5, 35)}
+    held = {f: path[34] for f in range(35, 60)}
+    clip = str(tmp_path / "bend.mp4")
+    _write_clip(clip, 640, 360, {**path, **held}, 60)
+    tracker = _bare_tracker(_BlobYolo((360, 640)))
+    seed = [(f, *path[f], 0.9, 10.0) for f in range(5, 10)]
+    flight = seed
+    for _ in range(2):
+        flight = tracker._refine_flight(clip, tracker.model, [2], flight, 640, 360, 60)
+    assert (flight[0][0], flight[-1][0]) == (5, 34)
+
+
+def test_track_video_rescans_at_high_res_before_trusting_motion(tmp_path):
+    """Portrait HD clip, ball too small for the 640 scan: a 1280 pass must find it. The ball is grey,
+    which the colour/motion fallback ignores, so only the high-res YOLO pass can recover it."""
+    path = {f: (300 + 6 * (f - 10), 600 + 15 * (f - 10)) for f in range(10, 30)}
+    clip = str(tmp_path / "portrait.mp4")
+    _write_clip(clip, 1080, 1920, path, 40, color=(120, 120, 120), r=8)
+    tracker = _bare_tracker(_BlobYolo((1920, 1080), min_full_imgsz=1280))
+    pts, _, _ = tracker.track_video(clip)
+    assert pts and (pts[0].frame_idx, pts[-1].frame_idx) == (10, 29)
+
+
+def test_refine_bridges_frames_yolo_misses_with_motion_near_the_path(tmp_path):
+    """Small ball against clutter: YOLO misses several frames in a row (drawn too small for the stand-in
+    YOLO here). Colour/motion inside the predicted window must bridge them, or the gap splits the
+    flight and the tail is lost."""
+    import math
+    path = {f: (40 + 300 * (1 - math.exp(-(f - 5) / 15)), 60 + 9 * (f - 5)) for f in range(5, 35)}
+    clip = str(tmp_path / "gap.mp4")
+    import cv2
+    import numpy as np
+    out = cv2.VideoWriter(clip, cv2.VideoWriter_fourcc(*"mp4v"), 30, (640, 360))
+    for f in range(45):
+        frame = np.zeros((360, 640, 3), dtype=np.uint8)
+        if f in path:
+            r = 3 if 20 <= f <= 23 else 5
+            cv2.circle(frame, tuple(int(round(v)) for v in path[f]), r, (255, 255, 255), -1)
+        out.write(frame)
+    out.release()
+    tracker = _bare_tracker(_BlobYolo((360, 640), min_px=50))
+    flight = [(f, *path[f], 0.9, 10.0) for f in range(5, 10)]
+    for _ in range(2):
+        flight = tracker._refine_flight(clip, tracker.model, [2], flight, 640, 360, 45)
+    assert (flight[0][0], flight[-1][0]) == (5, 34)
+
+
+def test_refine_never_extends_flight_on_motion_alone(tmp_path):
+    """After bat contact the window fills with moving blobs; one lying on the extrapolated path must not
+    extend the flight. Motion may only fill gaps between YOLO-confirmed hits."""
+    import math
+    path = {f: (40 + 300 * (1 - math.exp(-(f - 5) / 15)), 60 + 9 * (f - 5)) for f in range(5, 41)}
+    clip = str(tmp_path / "after_contact.mp4")
+    import cv2
+    import numpy as np
+    out = cv2.VideoWriter(clip, cv2.VideoWriter_fourcc(*"mp4v"), 30, (640, 360))
+    for f in range(50):
+        frame = np.zeros((360, 640, 3), dtype=np.uint8)
+        if f in path:  # frames 35..40: a small blob (bat/hands) carries on along the path, YOLO can't see it
+            cv2.circle(frame, tuple(int(round(v)) for v in path[f]), 3 if f >= 35 else 5, (255, 255, 255), -1)
+        out.write(frame)
+    out.release()
+    tracker = _bare_tracker(_BlobYolo((360, 640), min_px=50))
+    flight = [(f, *path[f], 0.9, 10.0) for f in range(5, 10)]
+    for _ in range(2):
+        flight = tracker._refine_flight(clip, tracker.model, [2], flight, 640, 360, 50)
+    assert (flight[0][0], flight[-1][0]) == (5, 34)

@@ -132,6 +132,16 @@ def select_flight(hits: List[tuple], width: int, height: int, max_gap: int = 4,
             best = run
     return [hits[i] for i in best] if len(best) >= 4 else None
 
+def predict_at(hits: List[tuple], f: int, k: int = 6) -> Tuple[float, float]:
+    """Ball (x, y) at frame f from a quadratic through the k hits nearest in time. Local, so it follows
+    paths that perspective bends, and extrapolates past the ends from the freshest hits."""
+    near = sorted(hits, key=lambda h: abs(h[0] - f))[:k]
+    t = [h[0] for h in near]
+    deg = min(2, len(near) - 1)
+    return (float(np.polyval(np.polyfit(t, [h[1] for h in near], deg), f)),
+            float(np.polyval(np.polyfit(t, [h[2] for h in near], deg), f)))
+
+
 class PitchTracker:
     """
     High-speed pitch trajectory tracker combining motion gating,
@@ -353,33 +363,51 @@ class PitchTracker:
                 for b, c, k in zip(res.xyxy.tolist(), res.conf.tolist(), res.cls.tolist())]
 
     def _refine_flight(self, video_path, model, classes, flight, width, height, total_frames, pad=6, win=320):
-        """Re-detects the ball at native resolution in a small window around the fitted path,
-        extending `pad` frames past each end, so small/far balls are not lost to downscaling."""
-        t = np.array([h[0] for h in flight], dtype=float)
-        cx = np.polyfit(t, [h[1] for h in flight], 2)
-        cy = np.polyfit(t, [h[2] for h in flight], 2)
-        f0, f1 = max(0, int(t[0]) - pad), min(total_frames - 1, int(t[-1]) + pad)
+        """Re-detects the ball at native resolution in a small window around the predicted path,
+        `pad` frames before the start and walking forward until the ball is lost for `pad` frames
+        or stops (caught), so small/far balls are not lost to downscaling.
+        Colour/motion only fills frames YOLO misses between YOLO-confirmed hits: it never steers the
+        prediction or extends the flight (after bat contact the window is full of moving blobs)."""
+        first, last = int(flight[0][0]), int(flight[-1][0])
+        f0 = max(0, first - pad)
         gate = 2.0 * max(4.0, 0.006 * max(width, height))
+        min_step = gate / 4.0  # px/frame; a held or caught ball moves less than this
         cap = cv2.VideoCapture(video_path)
-        cap.set(cv2.CAP_PROP_POS_FRAMES, f0)
-        hits = list(flight)
+        f = max(0, f0 - 2) - 1  # two frames early: the motion fallback differences against them
+        cap.set(cv2.CAP_PROP_POS_FRAMES, f + 1)
+        hits, filled = list(flight), []
         have = {h[0] for h in flight}
-        for f in range(f0, f1 + 1):
+        cur = prev = None
+        while f < min(total_frames - 1, last + pad):
+            f += 1
             ret, frame = cap.read()
             if not ret or frame is None:
                 break
-            if f in have:
+            prev2, prev, cur = prev, cur, frame
+            if f < f0 or f in have:
                 continue
-            px, py = float(np.polyval(cx, f)), float(np.polyval(cy, f))
+            px, py = predict_at(hits, f)
             x1 = int(min(max(0, px - win / 2), max(0, width - win)))
             y1 = int(min(max(0, py - win / 2), max(0, height - win)))
             near = [(np.hypot(x - px, y - py), x, y, c, w) for x, y, c, w, _ in
                     self._yolo_hits(model, frame[y1:y1 + win, x1:x1 + win], classes, win, 0.05, x1, y1)]
             near = [n for n in near if n[0] <= gate]
-            if near:
-                _, x, y, c, w = min(near)
-                hits.append((f, x, y, c, w))
+            if not near:  # ball too small for YOLO: colour/motion inside the gate, kept only if YOLO brackets it
+                motion = [(np.hypot(x - px, y - py), x, y, c, 2.0 * r) for x, y, r, c in self.detect_color_motion_ball(
+                    cur, prev, (x1, x1 + win, y1, y1 + win), "auto", prev2, return_all=True)]
+                motion = [n for n in motion if n[0] <= gate]
+                if motion:
+                    filled.append((f, *min(motion)[1:]))
+                continue
+            _, x, y, c, w = min(near)
+            if not first <= f <= last:  # extending: the nearest known hit must be left behind at flight speed
+                n = min(hits, key=lambda h: abs(h[0] - f))
+                if np.hypot(x - n[1], y - n[2]) < min_step * abs(f - n[0]):
+                    continue
+            hits.append((f, x, y, c, w))
+            first, last = min(first, f), max(last, f)
         cap.release()
+        hits += [h for h in filled if first < h[0] < last]
         return select_flight(hits, width, height) or flight
 
     def track_video(
@@ -439,7 +467,21 @@ class PitchTracker:
         # (cx, cy, width) of the plate; a few hits required so one stray box can't place the zone
         self.last_plate = tuple(float(v) for v in np.median(plates, axis=0)) if len(plates) >= 3 else None
 
-        flight = select_flight(yolo_hits, width, height) or select_flight(motion_hits, width, height)
+        flight = select_flight(yolo_hits, width, height)
+        if not flight and model is not None and max(width, height) > 1.5 * scan_sz:
+            # ball can shrink below YOLO's reach at 640 on HD/portrait frames: one slower 1280 pass
+            # (every other frame) before trusting colour/motion, which latches onto arms and sleeves
+            cap = cv2.VideoCapture(video_path)
+            for f in range(total_frames):
+                if f % 2 and cap.grab():
+                    continue
+                ret, frame = cap.read()
+                if not ret or frame is None:
+                    break
+                yolo_hits += [(f, x, y, c, w) for x, y, c, w, _ in self._yolo_hits(model, frame, classes, 1280, conf_thresh)]
+            cap.release()
+            flight = select_flight(yolo_hits, width, height)
+        flight = flight or select_flight(motion_hits, width, height)
         if flight and model is not None:
             for _ in range(2):
                 flight = self._refine_flight(video_path, model, classes, flight, width, height, total_frames)
