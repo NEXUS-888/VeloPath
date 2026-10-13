@@ -320,3 +320,23 @@ def test_refine_never_extends_flight_on_motion_alone(tmp_path):
     for _ in range(2):
         flight = tracker._refine_flight(clip, tracker.model, [2], flight, 640, 360, 50)
     assert (flight[0][0], flight[-1][0]) == (5, 34)
+
+
+def test_time_window_limits_tracking_to_the_marked_pitch(tmp_path):
+    """User marks the pitch (0.5s-1.2s at 30fps = frames 15-36): YOLO only sees those frames."""
+    path = {f: (40 + 15 * (f - 10), 60 + 6 * (f - 10)) for f in range(10, 41)}
+    clip = str(tmp_path / "w.mp4")
+    _write_clip(clip, 640, 360, path, 60)
+    model = _BlobYolo((360, 640))
+    seen = []
+    orig = model.predict
+
+    def predict(img, **kw):
+        if img.shape[:2] == (360, 640):
+            seen.append(1)
+        return orig(img, **kw)
+
+    model.predict = predict
+    pts, _, _ = _bare_tracker(model).track_video(clip, time_window=(0.5, 1.2))
+    assert len(seen) <= 22
+    assert (pts[0].frame_idx, pts[-1].frame_idx) == (15, 36)

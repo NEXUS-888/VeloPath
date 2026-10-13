@@ -1,7 +1,7 @@
 """
 End-to-end processing pipeline: Tracks ball, calculates speed, tests strike zone, and renders video.
 """
-from typing import Dict, Any, Optional, List, Callable
+from typing import Dict, Any, Optional, List, Callable, Tuple
 import functools
 import os
 import threading
@@ -72,6 +72,7 @@ def process_pitch_video(
     max_dimension: Optional[int] = 1920,
     mode: str = "baseball",
     progress: Optional[Callable[[str, float], None]] = None,
+    time_window: Optional[Tuple[float, float]] = None,
 ) -> Dict[str, Any]:
     """
     Complete end-to-end Pitch Lab analysis:
@@ -100,6 +101,7 @@ def process_pitch_video(
             perspective=perspective,
             mode=mode,
             progress_callback=lambda frac: report("Tracking ball", 0.85 * frac),
+            time_window=time_window,  # (start_s, end_s) the user marked around the pitch
         )
         resolved_perspective = getattr(tracker, "last_resolved_perspective", None) or perspective
         plate = getattr(tracker, "last_plate", None)

@@ -851,7 +851,7 @@ document.addEventListener('DOMContentLoaded', () => {
         };
     }
 
-    async function uploadAndProcessVideo(file) {
+    async function uploadAndProcessVideo(file, pitchWindow = null) {
         loadingOverlay.classList.remove('hidden');
         loadingStatusText.textContent = 'Uploading...';
         const jobId = Array.from(crypto.getRandomValues(new Uint8Array(8)), (b) => b.toString(16).padStart(2, '0')).join('');
@@ -868,6 +868,10 @@ document.addEventListener('DOMContentLoaded', () => {
         formData.append('hud_style', cleanVideoCheckbox?.checked ? 'none' : 'minimal_badge');
         formData.append('mode', activeTrackingMode);
         formData.append('job_id', jobId);
+        if (pitchWindow) {
+            formData.append('start_s', pitchWindow.start);
+            formData.append('end_s', pitchWindow.end);
+        }
 
         try {
             const response = await fetch('/api/process', {
@@ -892,9 +896,53 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // 16b. Pitch window: preview the chosen clip, mark start/end around the pitch, then process only that.
+    // Tracking cost scales with frames searched, so a 1.5s window on a 5s clip is ~3x faster.
+    const trimDock = document.getElementById('trimDock');
+    let pendingClip = null;  // {file, url, start, end}
+
+    function stageClip(file) {
+        if (pendingClip) URL.revokeObjectURL(pendingClip.url);
+        pendingClip = { file, url: URL.createObjectURL(file), start: 0, end: null };
+        if (emptyState) emptyState.classList.add('hidden');
+        video.src = pendingClip.url;
+        video.load();
+        document.getElementById('trimStartVal').textContent = '0.00s';
+        document.getElementById('trimEndVal').textContent = '--';
+        trimDock.classList.remove('hidden');
+    }
+
+    function processStaged(useWindow) {
+        if (!pendingClip) return;
+        const clip = pendingClip;
+        const end = clip.end ?? video.duration;
+        if (useWindow && !(end > clip.start)) {
+            alert('Set the end after the start.');
+            return;
+        }
+        trimDock.classList.add('hidden');
+        pendingClip = null;
+        uploadAndProcessVideo(clip.file, useWindow ? { start: clip.start, end } : null)
+            .finally(() => URL.revokeObjectURL(clip.url));
+    }
+
+    document.getElementById('trimStartBtn').addEventListener('click', () => {
+        if (!pendingClip) return;
+        pendingClip.start = video.currentTime;
+        document.getElementById('trimStartVal').textContent = `${video.currentTime.toFixed(2)}s`;
+    });
+    document.getElementById('trimEndBtn').addEventListener('click', () => {
+        if (!pendingClip) return;
+        pendingClip.end = video.currentTime;
+        document.getElementById('trimEndVal').textContent = `${video.currentTime.toFixed(2)}s`;
+    });
+    document.getElementById('trimProcessBtn').addEventListener('click', () => processStaged(true));
+    document.getElementById('trimWholeBtn').addEventListener('click', () => processStaged(false));
+
     videoUploadInput.addEventListener('change', (e) => {
         if (e.target.files && e.target.files[0]) {
-            uploadAndProcessVideo(e.target.files[0]);
+            stageClip(e.target.files[0]);
+            e.target.value = '';  // choosing the same file again still fires
         }
     });
 
@@ -915,7 +963,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     videoDropZone.addEventListener('drop', (e) => {
         if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-            uploadAndProcessVideo(e.dataTransfer.files[0]);
+            stageClip(e.dataTransfer.files[0]);
         }
     });
 

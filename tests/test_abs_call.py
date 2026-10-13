@@ -174,3 +174,18 @@ def test_speed_reports_one_frame_timing_uncertainty(blank_video, tmp_path):
     assert res["velocity_pm_mph"] == pytest.approx(res["velocity_mph"] / 14, abs=0.05)
     res = run(blank_video, tmp_path, flight(320, 240), None)
     assert res["velocity_pm_mph"] == pytest.approx(res["velocity_mph"] / 14, abs=0.05)
+
+
+def test_pipeline_hands_pitch_window_to_tracker(blank_video, tmp_path):
+    got = {}
+
+    class WindowTracker:
+        last_resolved_perspective, last_plate = "broadcast", None
+
+        def track_video(self, *a, **k):
+            got.update(k)
+            return flight(320, 240), 30.0, (W, H)
+
+    with patch("velopath.pipeline.get_tracker", WindowTracker):
+        process_pitch_video(blank_video, str(tmp_path / "o.mp4"), max_dimension=None, time_window=(0.2, 0.9))
+    assert got["time_window"] == (0.2, 0.9)

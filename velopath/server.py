@@ -136,11 +136,15 @@ def process_uploaded_video(
     hud_style: str = Form("none"),
     mode: str = Form("baseball"),
     job_id: Optional[str] = Form(None),
+    start_s: Optional[float] = Form(None),
+    end_s: Optional[float] = Form(None),
 ):
     """Accepts an uploaded pitch video and returns Pitch Lab metrics and rendered video.
     Optional client-chosen job_id lets the UI poll /api/progress/{job_id} meanwhile."""
     if job_id is not None and not re.fullmatch(r"[A-Za-z0-9]{1,32}", job_id):
         raise HTTPException(status_code=422, detail="job_id must be 1-32 letters or digits.")
+    if (start_s is None) != (end_s is None) or (start_s is not None and not 0 <= start_s < end_s):
+        raise HTTPException(status_code=422, detail="Pitch window needs 0 <= start_s < end_s (seconds).")
     started = time.monotonic()
     file_id = str(uuid.uuid4())[:8]
     ext = os.path.splitext(file.filename)[1] or ".mp4"
@@ -176,6 +180,7 @@ def process_uploaded_video(
             hud_style=hud_style,
             mode=mode,
             progress=progress,
+            time_window=(start_s, end_s) if start_s is not None else None,
         )
         result["video_id"] = file_id
         result["video_url"] = f"/api/video/{output_filename}"

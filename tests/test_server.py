@@ -119,3 +119,20 @@ def test_processing_does_not_block_other_requests(monkeypatch, tmp_path):
 def test_rerender_rejects_bad_calibration(client, extra):
     res = client.post("/api/rerender", json={"video_id": "sample", "trajectory": [{"frame": 1, "x": 1, "y": 1}], **extra})
     assert res.status_code == 422
+
+
+@pytest.mark.parametrize("window", [{"start_s": "2", "end_s": "1"}, {"start_s": "-1", "end_s": "1"}, {"start_s": "1"}])
+def test_process_rejects_bad_pitch_window(window, tmp_path, monkeypatch):
+    import velopath.server as server
+    monkeypatch.setattr(server, "UPLOADS_DIR", str(tmp_path))
+    res = TestClient(app).post("/api/process", files={"file": ("a.mp4", b"x")}, data=window)
+    assert res.status_code == 422
+
+
+def test_process_passes_pitch_window_to_pipeline(tmp_path, monkeypatch):
+    import velopath.server as server
+    got = {}
+    monkeypatch.setattr(server, "process_pitch_video", lambda **kw: got.update(kw) or {"pitch_detected": False})
+    monkeypatch.setattr(server, "UPLOADS_DIR", str(tmp_path))
+    res = TestClient(app).post("/api/process", files={"file": ("a.mp4", b"x")}, data={"start_s": "1.5", "end_s": "2.75"})
+    assert res.status_code == 200 and got["time_window"] == (1.5, 2.75)

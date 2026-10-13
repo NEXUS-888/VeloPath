@@ -367,14 +367,14 @@ class PitchTracker:
         return [((b[0] + b[2]) / 2.0 + ox, (b[1] + b[3]) / 2.0 + oy, float(c), float(b[2] - b[0]), int(k))
                 for b, c, k in zip(res.xyxy.tolist(), res.conf.tolist(), res.cls.tolist())]
 
-    def _refine_flight(self, video_path, model, classes, flight, width, height, total_frames, pad=6, win=320):
+    def _refine_flight(self, video_path, model, classes, flight, width, height, total_frames, pad=6, win=320, lo=0):
         """Re-detects the ball at native resolution in a small window around the predicted path,
         `pad` frames before the start and walking forward until the ball is lost for `pad` frames
         or stops (caught), so small/far balls are not lost to downscaling.
         Colour/motion only fills frames YOLO misses between YOLO-confirmed hits: it never steers the
         prediction or extends the flight (after bat contact the window is full of moving blobs)."""
         first, last = int(flight[0][0]), int(flight[-1][0])
-        f0 = max(0, first - pad)
+        f0 = max(lo, first - pad)
         gate = 2.0 * max(4.0, 0.006 * max(width, height))
         min_step = gate / 4.0  # px/frame; a held or caught ball moves less than this
         cap = cv2.VideoCapture(video_path)
@@ -423,6 +423,7 @@ class PitchTracker:
         perspective: str = "auto",
         progress_callback: Optional[Callable[[float], None]] = None,
         mode: str = "baseball",
+        time_window: Optional[Tuple[float, float]] = None,
     ) -> Tuple[List[TrajectoryPoint], float, Tuple[int, int]]:
         """
         1. Scan: YOLO on every frame (stride 2 for long clips) at 640px; colour/motion
@@ -438,6 +439,13 @@ class PitchTracker:
         width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        # only the user-marked pitch is searched: cost scales with the window, not the clip
+        lo, hi = 0, total_frames
+        if time_window:
+            lo = max(0, min(total_frames, int(time_window[0] * fps)))
+            hi = max(lo, min(total_frames, int(np.ceil(time_window[1] * fps)) + 1))
+            cap.set(cv2.CAP_PROP_POS_FRAMES, lo)
+        n = float(max(1, hi - lo))
 
         raw_persp = (perspective or "auto").lower().strip()
         is_normal = (mode or "baseball").lower().strip() in ["normal", "general"] or raw_persp in ["normal", "general"]
@@ -448,11 +456,11 @@ class PitchTracker:
             (int(k) for k, v in getattr(model, "names", {}).items() if str(v).lower() == "homeplate"), None)
         scan_classes = classes + [plate_cls] if classes is not None and plate_cls is not None else classes
         scan_sz = 640  # full-frame scan only seeds the flight; _refine_flight restores native resolution
-        stride = 1 if total_frames <= 300 else 2
+        stride = 1 if hi - lo <= 300 else 2
 
         yolo_hits, motion_hits, plates = [], [], []
         prev, prev2 = None, None
-        for f in range(total_frames):
+        for f in range(lo, hi):
             ret, frame = cap.read()
             if not ret or frame is None:
                 break
@@ -467,7 +475,7 @@ class PitchTracker:
                     frame, prev, (0, width, 0, height), ball_type, prev2, return_all=True)]
                 prev2, prev = prev, frame
             if progress_callback:
-                progress_callback(0.8 * f / float(max(1, total_frames)))
+                progress_callback(0.8 * (f - lo) / n)
         cap.release()
         # (cx, cy, width) of the plate; a few hits required so one stray box can't place the zone
         self.last_plate = tuple(float(v) for v in np.median(plates, axis=0)) if len(plates) >= 3 else None
@@ -477,9 +485,10 @@ class PitchTracker:
             # ball can shrink below YOLO's reach at 640 on HD/portrait frames: one slower 1280 pass
             # (every other frame) before trusting colour/motion, which latches onto arms and sleeves
             cap = cv2.VideoCapture(video_path)
-            for f in range(total_frames):
+            cap.set(cv2.CAP_PROP_POS_FRAMES, lo)
+            for f in range(lo, hi):
                 if progress_callback:
-                    progress_callback(0.8 + 0.15 * f / float(max(1, total_frames)))
+                    progress_callback(0.8 + 0.15 * (f - lo) / n)
                 if f % 2 and cap.grab():
                     continue
                 ret, frame = cap.read()
@@ -491,7 +500,7 @@ class PitchTracker:
         flight = flight or select_flight(motion_hits, width, height)
         if flight and model is not None:
             for _ in range(2):
-                flight = self._refine_flight(video_path, model, classes, flight, width, height, total_frames)
+                flight = self._refine_flight(video_path, model, classes, flight, width, height, hi, lo=lo)
         if progress_callback:
             progress_callback(1.0)
 
