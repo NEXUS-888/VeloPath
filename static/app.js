@@ -677,6 +677,14 @@ document.addEventListener('DOMContentLoaded', () => {
         flightTimeVal.textContent = Math.round(data.flight_time_ms);
         // break inches need a real scale: unknown until the zone is calibrated
         const brk = (v) => data.zone_calibrated === false ? '—' : (v >= 0 ? '+' : '') + v.toFixed(1);
+        const is3d = data.measurement === '3d';
+        const setLabel = (id, text, title) => { const el = document.getElementById(id); if (el) { el.textContent = text; el.title = title; } };
+        setLabel('vertBreakLabel', is3d ? 'Induced Vert. Break (3D)' : 'Vertical Break (est.)',
+                 is3d ? '3D fit from plate + rubber taps: movement from spin, gravity removed. + = rise'
+                      : '2D estimate: how far the path bows on screen. Tap plate + rubber for 3D. + = drop');
+        setLabel('horzBreakLabel', is3d ? 'Horizontal Break (3D)' : 'Horizontal Break (est.)',
+                 is3d ? "3D fit: sideways movement from spin, + = catcher's right" : '2D estimate; tap plate + rubber for 3D');
+        setLabel('pitchTypeLabel', 'Pitch Type', is3d ? 'From 3D speed and break' : 'Needs plate + rubber taps (3D) to name the pitch');
         vertBreakVal.textContent = brk(data.vert_break_in);
         horzBreakVal.textContent = brk(data.horz_break_in);
         
@@ -757,6 +765,7 @@ document.addEventListener('DOMContentLoaded', () => {
             hud_style: hudStyle,
             mode: activeTrackingMode,
             batter_height_in: Number(dockBatterHeight.value) || 72,
+            ...(calibrationTaps || {}),
             ...extra,
         };
 
@@ -786,8 +795,12 @@ document.addEventListener('DOMContentLoaded', () => {
     applyZoneChangesBtn.addEventListener('click', () => { zoneUserSet = true; applyStrikeZoneChanges(); });
     dockApplyBtn.addEventListener('click', () => { zoneUserSet = true; applyStrikeZoneChanges(); });
 
-    // 15b. Plate calibration: tap the plate's two front corners (17in apart) on a paused frame
-    let plateTaps = null;  // null = not tapping; else corners collected so far, in rendered-video pixels
+    // 15b. Calibration taps on a paused frame: plate front corners (17in) -> real zone;
+    // + rubber ends (24in, 60.5 ft away) -> 3D speed and break. Remembered for later re-renders of this clip.
+    let plateTaps = null;  // null = not tapping; else points collected so far, in rendered-video pixels
+    let calibrationTaps = null;  // {plate_corners, rubber_corners?} sent with every re-render once set
+    const TAP_STEPS = ['Tap plate: left front corner', 'Tap plate: right front corner',
+                       'Tap rubber: left end (click here to skip)', 'Tap rubber: right end (click here to skip)'];
 
     function clientToVideoPx(e) {
         const r = video.getBoundingClientRect();  // includes the zoom transform; video is object-fit: contain
@@ -798,15 +811,29 @@ document.addEventListener('DOMContentLoaded', () => {
         return (x >= 0 && x <= vidW && y >= 0 && y <= vidH) ? [x, y] : null;
     }
 
+    function finishTaps() {
+        const t = plateTaps;
+        plateTaps = null;
+        dockTapPlateBtn.textContent = 'Tap plate';
+        calibrationTaps = { plate_corners: t.slice(0, 2), ...(t.length === 4 ? { rubber_corners: t.slice(2, 4) } : {}) };
+        zoneUserSet = false;  // the fresh plate taps define the zone (a hand-dragged box would win otherwise)
+        applyStrikeZoneChanges();
+    }
+
     dockCancelBtn.addEventListener('click', () => {
         plateTaps = null;
         dockTapPlateBtn.textContent = 'Tap plate';
     });
 
     dockTapPlateBtn.addEventListener('click', () => {
+        if (plateTaps !== null && plateTaps.length >= 2) {  // during the rubber taps: skip them (zone only, no 3D)
+            plateTaps = plateTaps.slice(0, 2);
+            finishTaps();
+            return;
+        }
         video.pause();
         plateTaps = [];
-        dockTapPlateBtn.textContent = 'Tap left front corner';
+        dockTapPlateBtn.textContent = TAP_STEPS[0];
     });
 
     videoDropZone.addEventListener('click', (e) => {
@@ -814,14 +841,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const pt = clientToVideoPx(e);
         if (!pt) return;
         plateTaps.push(pt);
-        if (plateTaps.length < 2) {
-            dockTapPlateBtn.textContent = 'Tap right front corner';
+        if (plateTaps.length < 4) {
+            dockTapPlateBtn.textContent = TAP_STEPS[plateTaps.length];
             return;
         }
-        const corners = plateTaps;
-        plateTaps = null;
-        dockTapPlateBtn.textContent = 'Tap plate';
-        applyStrikeZoneChanges({ plate_corners: corners });
+        finishTaps();
     });
 
     // 16. Upload & Process Video Workflow
@@ -910,6 +934,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function stageClip(file) {
         if (pendingClip) URL.revokeObjectURL(pendingClip.url);
         pendingClip = { file, url: URL.createObjectURL(file), start: 0, end: null };
+        calibrationTaps = null;  // taps belong to the previous clip's camera
         if (emptyState) emptyState.classList.add('hidden');
         video.src = pendingClip.url;
         video.load();

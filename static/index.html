@@ -210,7 +210,7 @@
                     </div>
                     <span id="dockCallStatus" class="text-[10px] font-black px-2 py-0.5 rounded uppercase bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">IN ZONE</span>
                     <div class="h-4 w-px bg-white/20"></div>
-                    <button id="dockTapPlateBtn" title="Tap the two front corners of home plate: the plate's 17in width calibrates the zone, speed scale and break" class="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-pitchcyan text-xs font-bold transition">Tap plate</button>
+                    <button id="dockTapPlateBtn" title="Tap the plate's two front corners (sets the strike zone), then the rubber's two ends for 3D speed and break (optional)" class="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-pitchcyan text-xs font-bold transition">Tap plate</button>
                     <label class="text-[10px] text-slate-400 flex items-center gap-1" title="Batter height sets the zone's top and bottom (ABS: 53.5% / 27%)">Batter
                         <input id="dockBatterHeight" type="number" min="36" max="96" step="1" value="72" class="w-12 bg-slate-900 border border-white/10 rounded px-1 text-white text-xs"> in
                     </label>
@@ -381,7 +381,7 @@
 
                     <!-- Pitch Classification -->
                     <div class="p-3 rounded-xl bg-slate-900/60 border border-white/5">
-                        <span class="text-[10px] uppercase tracking-wider font-semibold text-slate-400 block mb-1" title="Guessed from speed and the 2D break estimate; not reliable for amateur speeds">Pitch Type (est.)</span>
+                        <span id="pitchTypeLabel" class="text-[10px] uppercase tracking-wider font-semibold text-slate-400 block mb-1" title="Needs plate + rubber taps (3D) to name the pitch">Pitch Type</span>
                         <div class="text-xs font-bold text-white truncate" id="sidePitchType">
                             Fastball
                         </div>
@@ -389,7 +389,7 @@
 
                     <!-- Vertical Break -->
                     <div class="p-3 rounded-xl bg-slate-900/60 border border-white/5">
-                        <span class="text-[10px] uppercase tracking-wider font-semibold text-slate-400 block mb-1" title="2D estimate: how far the path bows from a straight line, scaled by the calibrated zone. Not 3D break; camera angle affects it. Positive = drop">Vertical Break (est.)</span>
+                        <span id="vertBreakLabel" class="text-[10px] uppercase tracking-wider font-semibold text-slate-400 block mb-1" title="2D estimate: how far the path bows on screen. Tap plate + rubber for 3D. + = drop">Vertical Break (est.)</span>
                         <div class="text-base font-bold text-white tabular-nums">
                             <span id="vertBreakVal">--</span> <span class="text-xs text-slate-400 font-normal">in</span>
                         </div>
@@ -397,7 +397,7 @@
 
                     <!-- Horizontal Break -->
                     <div class="p-3 rounded-xl bg-slate-900/60 border border-white/5">
-                        <span class="text-[10px] uppercase tracking-wider font-semibold text-slate-400 block mb-1" title="2D estimate: how far the path bows sideways from a straight line, scaled by the calibrated zone. Not 3D break; camera angle affects it">Horizontal Break (est.)</span>
+                        <span id="horzBreakLabel" class="text-[10px] uppercase tracking-wider font-semibold text-slate-400 block mb-1" title="2D estimate; tap plate + rubber for 3D">Horizontal Break (est.)</span>
                         <div class="text-base font-bold text-white tabular-nums">
                             <span id="horzBreakVal">--</span> <span class="text-xs text-slate-400 font-normal">in</span>
                         </div>

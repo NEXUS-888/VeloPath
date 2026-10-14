@@ -198,3 +198,13 @@ def test_process_and_rerender_return_the_same_fields(blank_video, tmp_path):
                            first["strike_zone"], max_dimension=None)
     assert set(first) - {"compute"} == set(again)
     assert (again["call"], again["velocity_mph"]) == (first["call"], first["velocity_mph"])
+
+
+def test_dragged_zone_wins_over_plate_taps_for_the_zone(blank_video, tmp_path):
+    """After calibrating, re-renders keep sending the taps (for the 3D camera); a zone the user then
+    dragged by hand must still be the zone that is judged."""
+    traj = [{"frame": 5 + i, "x": 40 + 20 * i, "y": 200} for i in range(15)]
+    dragged = {"x_min": 100.0, "y_min": 100.0, "x_max": 140.0, "y_max": 150.0}
+    res = rerender_pitch(blank_video, str(tmp_path / "z.mp4"), traj, 60.5, dragged, max_dimension=None,
+                         plate_corners=[[303, 300], [337, 300]])
+    assert res["strike_zone"] == pytest.approx(dragged)

@@ -331,17 +331,19 @@ def rerender_pitch(
     if show_strike_zone is None:
         show_strike_zone = not is_normal_mode
 
+    # zone: one the user set (drag / Apply) > built from plate taps > uncalibrated guess.
+    # Taps keep coming with later re-renders for the 3D camera, so they must not undo a hand-dragged zone.
     zone_calibrated = bool(plate_corners or custom_strike_zone)
-    if plate_corners:  # user tapped the plate's front corners on the rendered video
-        (ax, ay), (bx, by) = plate_corners
-        strike_zone = StrikeZone.from_plate_corners((ax / sx, ay / sy), (bx / sx, by / sy), batter_height_in)
-    elif custom_strike_zone:
+    if custom_strike_zone:
         strike_zone = StrikeZone(
             x_min=float(custom_strike_zone["x_min"]) / sx,
             y_min=float(custom_strike_zone["y_min"]) / sy,
             x_max=float(custom_strike_zone["x_max"]) / sx,
             y_max=float(custom_strike_zone["y_max"]) / sy,
         )
+    elif plate_corners:  # user tapped the plate's front corners on the rendered video
+        (ax, ay), (bx, by) = plate_corners
+        strike_zone = StrikeZone.from_plate_corners((ax / sx, ay / sy), (bx / sx, by / sy), batter_height_in)
     else:
         strike_zone = StrikeZone.get_preset_zone(width, height, view_type="behind_catcher")
 
