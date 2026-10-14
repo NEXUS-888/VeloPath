@@ -5,74 +5,9 @@ from typing import List, Tuple
 import numpy as np
 
 
-def calculate_velocity_mph(distance_ft: float, frames: int, fps: float) -> float:
-    """
-    Calculate pitch velocity in Miles Per Hour (MPH).
-    
-    Args:
-        distance_ft: Pitch flight distance in feet (e.g., 60.5 for MLB, 43.0 for softball).
-        frames: Number of elapsed frames between pitch release and plate arrival.
-        fps: Frame rate of the video (e.g. 30.0, 60.0, 120.0).
-        
-    Returns:
-        Velocity in MPH (rounded to 1 decimal place).
-    """
-    if frames <= 0:
-        raise ValueError("Frames elapsed must be strictly positive.")
-    if distance_ft <= 0:
-        raise ValueError("Distance must be strictly positive.")
-    if fps <= 0:
-        raise ValueError("FPS must be strictly positive.")
-        
-    time_seconds = frames / fps
-    velocity_fps = distance_ft / time_seconds # feet per second
-    velocity_mph = velocity_fps * (3600.0 / 5280.0) # 1 ft/s = 0.681818 MPH
-    return round(float(velocity_mph), 1)
-
-
 def calculate_velocity_kmh(velocity_mph: float) -> float:
     """Convert velocity from MPH to km/h."""
     return round(float(velocity_mph * 1.60934), 1)
-
-
-def calculate_flight_time_ms(frames: int, fps: float) -> float:
-    """Calculate flight time in milliseconds."""
-    if frames < 0 or fps <= 0:
-        raise ValueError("Invalid frames or fps.")
-    return round(float((frames / fps) * 1000.0), 1)
-
-
-def estimate_trajectory_coverage(
-    trajectory_points: List[Tuple[float, float]],
-    tunnel_start_y: float,
-    tunnel_end_y: float,
-    min_coverage: float = 0.20
-) -> float:
-    """
-    Estimate what fraction of the total pitch tunnel was traversed by the tracked points.
-    
-    Args:
-        trajectory_points: List of (x, y) coordinates.
-        tunnel_start_y: Estimated vertical release position.
-        tunnel_end_y: Vertical plate / strike zone position.
-        min_coverage: Minimum clamp to prevent division by zero or extreme over-scaling.
-        
-    Returns:
-        Coverage fraction in range [min_coverage, 1.0].
-    """
-    if len(trajectory_points) < 2:
-        return 1.0
-        
-    total_span = abs(tunnel_end_y - tunnel_start_y)
-    if total_span < 15.0:
-        return 1.0
-        
-    y_first = trajectory_points[0][1]
-    y_last = trajectory_points[-1][1]
-    tracked_span = abs(y_last - y_first)
-    
-    fraction = tracked_span / float(total_span)
-    return float(np.clip(fraction, min_coverage, 1.0))
 
 
 def calculate_advanced_velocity(

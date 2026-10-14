@@ -1,31 +1,10 @@
 import pytest
 from velopath.physics import (
-    calculate_velocity_mph,
     calculate_velocity_kmh,
-    calculate_flight_time_ms,
     calculate_pitch_break,
     classify_pitch_type,
     calculate_advanced_velocity,
-    estimate_trajectory_coverage,
 )
-
-
-def test_calculate_velocity_mph_regulation():
-    """
-    Regulation 60.5 ft pitch taking 30 frames at 60 FPS (0.500s flight time).
-    v = 60.5 ft / 0.5s = 121 ft/s = 82.5 MPH.
-    """
-    velocity_mph = calculate_velocity_mph(distance_ft=60.5, frames=30, fps=60.0)
-    assert pytest.approx(velocity_mph, 0.2) == 82.5
-
-
-def test_calculate_velocity_mph_softball():
-    """
-    Softball 43.0 ft pitch taking 40 frames at 60 FPS (0.666s flight time).
-    v = 43 ft / (40/60) = 64.5 ft/s = 43.98 MPH.
-    """
-    velocity_mph = calculate_velocity_mph(distance_ft=43.0, frames=40, fps=60.0)
-    assert pytest.approx(velocity_mph, 0.2) == 44.0
 
 
 def test_calculate_velocity_kmh():
@@ -33,20 +12,6 @@ def test_calculate_velocity_kmh():
     mph = 82.5
     kmh = calculate_velocity_kmh(mph)
     assert pytest.approx(kmh, 0.2) == 132.77
-
-
-def test_calculate_flight_time_ms():
-    """30 frames at 60 FPS = 500 ms."""
-    ms = calculate_flight_time_ms(frames=30, fps=60.0)
-    assert pytest.approx(ms, 0.1) == 500.0
-
-
-def test_velocity_zero_frames_raises():
-    """Zero or negative frames should raise ValueError."""
-    with pytest.raises(ValueError):
-        calculate_velocity_mph(distance_ft=60.5, frames=0, fps=60.0)
-    with pytest.raises(ValueError):
-        calculate_velocity_mph(distance_ft=60.5, frames=-5, fps=60.0)
 
 
 def test_calculate_pitch_break():
@@ -137,19 +102,3 @@ def test_calculate_advanced_velocity_casual_preset():
         coverage_fraction=1.0
     )
     assert 45.0 <= res["release_velocity_mph"] <= 52.0
-
-
-def test_estimate_trajectory_coverage():
-    """
-    Test calculating the coverage fraction of a tracked trajectory.
-    If release is at y=1000, plate is at y=500 (total span 500px).
-    If ball tracked from y=750 to y=500 (span 250px), coverage should be 0.50.
-    """
-    points = [(500.0, 750.0), (500.0, 625.0), (500.0, 500.0)]
-    coverage = estimate_trajectory_coverage(
-        trajectory_points=points,
-        tunnel_start_y=1000.0,
-        tunnel_end_y=500.0
-    )
-    assert pytest.approx(coverage, 0.05) == 0.50
-

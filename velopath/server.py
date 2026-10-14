@@ -80,8 +80,6 @@ def process_sample_pitch():
 
     sample_file = os.path.join(BASE_DIR, "assets", "sample_pitch.mp4")
     if not os.path.exists(sample_file):
-        sample_file = os.path.join(BASE_DIR, "WhatsApp Video 2026-09-02 at 11.24.19 PM.mp4")
-    if not os.path.exists(sample_file):
         raise HTTPException(status_code=404, detail="Sample video not found in workspace.")
 
     result = process_pitch_video(
@@ -206,8 +204,6 @@ def rerender_existing_pitch(payload: RerenderPayload):
     """Fast re-render using existing trajectory and updated strike zone or graphic style."""
     if payload.video_id == "sample":
         input_video = os.path.join(BASE_DIR, "assets", "sample_pitch.mp4")
-        if not os.path.exists(input_video):
-            input_video = os.path.join(BASE_DIR, "WhatsApp Video 2026-09-02 at 11.24.19 PM.mp4")
     else:
         if not payload.video_id.isalnum():
             raise HTTPException(status_code=404, detail="Original video not found for re-render.")

@@ -6,17 +6,12 @@ import functools
 import os
 import threading
 import cv2
-import numpy as np
 
 from velopath.tracker import PitchTracker, TrajectoryPoint
 from velopath.physics import (
-    calculate_velocity_mph,
-    calculate_velocity_kmh,
-    calculate_flight_time_ms,
     calculate_pitch_break,
     classify_pitch_type,
     calculate_advanced_velocity,
-    estimate_trajectory_coverage,
 )
 from velopath.strike_zone import StrikeZone, evaluate_pitch, PitchCallResult, PLATE_WIDTH_IN
 from velopath.renderer import PitchRenderer, output_size
@@ -107,10 +102,6 @@ def process_pitch_video(
         plate = getattr(tracker, "last_plate", None)
         gpu = getattr(getattr(tracker, "model", None), "gpu_name", None)
         compute = f"{gpu} (GPU worker)" if gpu and not tracker.model.using_fallback else "this computer"
-
-    cap = cv2.VideoCapture(input_video_path)
-    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    cap.release()
 
     if not trajectory_points:
         # Clean No-Pitch handling (e.g. windup drill, truncated clip, or aborted take)
