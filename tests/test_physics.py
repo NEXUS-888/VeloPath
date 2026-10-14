@@ -46,31 +46,12 @@ def test_calculate_advanced_velocity_with_drag():
     res = calculate_advanced_velocity(
         distance_ft=60.5,
         elapsed_frames=30.0,
-        fps=60.0,
-        coverage_fraction=1.0
+        fps=60.0
     )
     assert 78.0 <= res["release_velocity_mph"] <= 82.0
     assert 71.0 <= res["plate_velocity_mph"] <= 76.0
     assert res["plate_velocity_mph"] < res["release_velocity_mph"]  # Drag slows it down
     assert pytest.approx(res["flight_time_ms"], 1.0) == 500.0
-
-
-def test_calculate_advanced_velocity_partial_coverage():
-    """
-    CRITICAL REGRESSION TEST:
-    A student throws a ball in a park. Total pitch takes ~22 frames at 30 FPS.
-    The tracker only captures 11 frames (50% coverage).
-    Without coverage scaling, 11 frames over 55 ft would explode to 106.4 MPH.
-    WITH coverage fraction = 0.50, speed should be a realistic ~48-55 MPH!
-    """
-    res = calculate_advanced_velocity(
-        distance_ft=60.5,
-        elapsed_frames=11.0,
-        fps=30.0,
-        coverage_fraction=0.50
-    )
-    assert 48.0 <= res["release_velocity_mph"] <= 56.0
-    assert res["release_velocity_mph"] < 65.0  # Must NOT be 100+ MPH!
 
 
 def test_calculate_advanced_velocity_cricket_preset():
@@ -82,8 +63,7 @@ def test_calculate_advanced_velocity_cricket_preset():
     res = calculate_advanced_velocity(
         distance_ft=58.0,
         elapsed_frames=28.0,
-        fps=60.0,
-        coverage_fraction=1.0
+        fps=60.0
     )
     assert 84.0 <= res["release_velocity_mph"] <= 93.0
     assert res["sport"] == "cricket" or res["effective_distance_ft"] == 58.0
@@ -98,7 +78,6 @@ def test_calculate_advanced_velocity_casual_preset():
     res = calculate_advanced_velocity(
         distance_ft=35.0,
         elapsed_frames=15.0,
-        fps=30.0,
-        coverage_fraction=1.0
+        fps=30.0
     )
     assert 45.0 <= res["release_velocity_mph"] <= 52.0

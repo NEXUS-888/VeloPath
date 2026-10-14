@@ -14,21 +14,20 @@ def calculate_advanced_velocity(
     distance_ft: float,
     elapsed_frames: float,
     fps: float,
-    coverage_fraction: float = 1.0,
     ball_type: str = "baseball"
 ) -> dict:
     """
     Physically grounded velocity calculation using Alan Nathan aerodynamic drag model.
     Accounts for:
     1. Pitcher release extension (e.g. 5.5 ft for regulation baseball).
-    2. Partial trajectory coverage fraction (prevents partial tracks from exploding speed).
-    3. Aerodynamic drag deceleration (release speed vs plate arrival speed).
+    2. Aerodynamic drag deceleration (release speed vs plate arrival speed).
+    The tracked flight is assumed to run from release to the glove/bat; a track that misses either
+    end overstates speed, which is why the pipeline reports the +-1-frame error alongside it.
     
     Args:
         distance_ft: Presumed mound/bowler to plate/crease distance (e.g. 60.5, 58.0, 46.0, 43.0, 35.0).
         elapsed_frames: Number of elapsed frames between first and last tracked detection.
         fps: Video frames per second.
-        coverage_fraction: Estimated fraction of the full pitch tunnel tracked (0.1 to 1.0).
         ball_type: 'baseball', 'tennis_cricket', or 'softball'.
         
     Returns:
@@ -39,14 +38,11 @@ def calculate_advanced_velocity(
             plate_velocity_kmh: Speed crossing the plate (km/h).
             avg_velocity_mph: Average velocity over the flight (MPH).
             flight_time_ms: Total physical flight time (ms).
-            effective_distance_ft: Distance actually traveled by the tracked points (ft).
-            coverage_fraction: Coverage ratio applied.
+            effective_distance_ft: Release-to-plate distance used (ft).
             sport: Detected sport category based on distance.
     """
     if elapsed_frames <= 0 or fps <= 0 or distance_ft <= 0:
         raise ValueError("Inputs must be strictly positive.")
-
-    cov = float(np.clip(coverage_fraction, 0.15, 1.0))
 
     # Determine sport category and nominal flight tunnel distance (subtracting release extension)
     if distance_ft >= 59.5:
@@ -71,8 +67,7 @@ def calculate_advanced_velocity(
         nominal_flight_dist = distance_ft
         sport = "casual_throw"
 
-    # Effective distance traversed by the tracked frames
-    effective_dist_ft = nominal_flight_dist * cov
+    effective_dist_ft = nominal_flight_dist
     time_s = elapsed_frames / float(fps)
 
     # Raw average velocity in feet per second
@@ -98,7 +93,6 @@ def calculate_advanced_velocity(
         "avg_velocity_kmh": calculate_velocity_kmh(avg_mph),
         "flight_time_ms": full_flight_time_ms,
         "effective_distance_ft": round(float(effective_dist_ft), 1),
-        "coverage_fraction": round(float(cov), 2),
         "sport": sport
     }
 

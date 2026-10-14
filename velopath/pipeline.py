@@ -8,11 +8,7 @@ import threading
 import cv2
 
 from velopath.tracker import PitchTracker, TrajectoryPoint
-from velopath.physics import (
-    calculate_pitch_break,
-    classify_pitch_type,
-    calculate_advanced_velocity,
-)
+from velopath.physics import calculate_pitch_break, classify_pitch_type, calculate_advanced_velocity
 from velopath.strike_zone import StrikeZone, evaluate_pitch, PitchCallResult, PLATE_WIDTH_IN
 from velopath.renderer import PitchRenderer, output_size
 
@@ -24,6 +20,10 @@ _TRACK_LOCK = threading.Lock()  # YOLO predict isn't thread-safe and track_video
 def get_tracker() -> PitchTracker:
     """One tracker per process: loading YOLO weights costs seconds per request."""
     return PitchTracker()
+
+
+def _is_normal(mode: Optional[str], perspective: Optional[str]) -> bool:
+    return (mode or "baseball").lower().strip() in ("normal", "general") or (perspective or "").lower().strip() in ("normal", "general")
 
 
 def judge_pitch(
@@ -52,6 +52,98 @@ def judge_pitch(
     return evaluate_pitch((bx, by), strike_zone)
 
 
+def _analyze_and_render(
+    input_video_path: str,
+    output_video_path: str,
+    pts: List[TrajectoryPoint],
+    fps: float,
+    width: int,
+    height: int,
+    strike_zone: StrikeZone,
+    zone_calibrated: bool,
+    is_normal_mode: bool,
+    show_strike_zone: bool,
+    distance_ft: float,
+    ball_type: str,
+    perspective: str,
+    pitch_number: int,
+    graphic_style: str,
+    trim_to_pitch: bool,
+    hud_style: str,
+    max_dimension: Optional[int],
+    report: Callable[[str, float], None],
+) -> Dict[str, Any]:
+    """Speed, break, call and the rendered video for a tracked flight (source pixels in, UI pixels out).
+    Shared by process_pitch_video and rerender_pitch so the two can never disagree."""
+    release_frame, plate_frame = pts[0].frame_idx, pts[-1].frame_idx
+    elapsed_frames = max(1, plate_frame - release_frame)
+    vel = calculate_advanced_velocity(distance_ft=distance_ft, elapsed_frames=float(elapsed_frames), fps=fps, ball_type=ball_type)
+    px_per_in = strike_zone.width / PLATE_WIDTH_IN  # zone is 17in wide: calibrated zone -> real inches
+    horz_break_in, vert_break_in = calculate_pitch_break([(p.x, p.y) for p in pts], pixels_per_inch=px_per_in)
+    pitch_tag = "Ball Flight" if is_normal_mode else classify_pitch_type(vel["release_velocity_mph"], vert_break_in, horz_break_in)
+    call_result = judge_pitch(pts, strike_zone, is_normal_mode, zone_calibrated)
+
+    os.makedirs(os.path.dirname(os.path.abspath(output_video_path)), exist_ok=True)
+    report("Rendering video", 0.85)
+    out_w, out_h = PitchRenderer(graphic_style=graphic_style).render_complete_video(
+        input_video_path=input_video_path,
+        output_video_path=output_video_path,
+        trajectory_points=pts,
+        velocity_mph=vel["release_velocity_mph"],
+        vert_break_in=vert_break_in,
+        horz_break_in=horz_break_in,
+        strike_zone=strike_zone,
+        call_result=call_result if zone_calibrated or is_normal_mode else None,  # no fake call on a guessed zone
+        pitch_number=pitch_number,
+        pitch_tag=pitch_tag,
+        flight_time_ms=vel["flight_time_ms"],
+        show_strike_zone=show_strike_zone and zone_calibrated,
+        graphic_style=graphic_style,
+        trim_to_pitch=trim_to_pitch,
+        hud_style=hud_style,
+        max_dimension=max_dimension,
+    )
+    sx = out_w / float(width) if width > 0 else 1.0
+    sy = out_h / float(height) if height > 0 else 1.0
+    return {
+        "pitch_detected": True,
+        "mode": "normal" if is_normal_mode else "baseball",
+        "show_strike_zone": show_strike_zone,
+        "pitch_number": pitch_number,
+        "velocity_mph": vel["release_velocity_mph"],
+        "velocity_pm_mph": round(vel["release_velocity_mph"] / elapsed_frames, 1),  # +-1 frame of whole-frame timing
+        "velocity_kmh": vel["release_velocity_kmh"],
+        "plate_velocity_mph": vel["plate_velocity_mph"],
+        "plate_velocity_kmh": vel["plate_velocity_kmh"],
+        "flight_time_ms": vel["flight_time_ms"],
+        "effective_distance_ft": vel["effective_distance_ft"],
+        "sport": vel["sport"],
+        "vert_break_in": vert_break_in,
+        "horz_break_in": horz_break_in,
+        "pitch_tag": pitch_tag,
+        "is_strike": call_result.is_strike,
+        "call": call_result.call,
+        "zone_calibrated": zone_calibrated,
+        "strike_zone": {
+            "x_min": round(strike_zone.x_min * sx, 1),
+            "y_min": round(strike_zone.y_min * sy, 1),
+            "x_max": round(strike_zone.x_max * sx, 1),
+            "y_max": round(strike_zone.y_max * sy, 1),
+        },
+        "plate_crossing": {"x": round(call_result.plate_x * sx, 1), "y": round(call_result.plate_y * sy, 1)},
+        "graphic_style": graphic_style,
+        "ball_type": ball_type,
+        "perspective": perspective,
+        "release_frame": release_frame,
+        "plate_frame": plate_frame,
+        "elapsed_frames": elapsed_frames,
+        "fps": fps,
+        "video_resolution": {"width": out_w, "height": out_h},
+        "output_video_path": output_video_path,
+        "trajectory": [{"frame": p.frame_idx, "x": round(p.x * sx, 1), "y": round(p.y * sy, 1)} for p in pts],
+    }
+
+
 def process_pitch_video(
     input_video_path: str,
     output_video_path: str,
@@ -70,20 +162,12 @@ def process_pitch_video(
     time_window: Optional[Tuple[float, float]] = None,
 ) -> Dict[str, Any]:
     """
-    Complete end-to-end Pitch Lab analysis:
-    Tracks ball trajectory, calculates speed (MPH), checks strike zone,
-    and renders output video with Statcast 3D streamline and HUD card.
-    Supports both Baseball Pitch Mode and Normal / Any Video Mode.
+    Tracks the ball, measures speed / break, makes the ABS call (when a real zone exists)
+    and renders the output video. Supports Baseball Pitch Mode and Normal / Any Video Mode.
     """
     if not os.path.exists(input_video_path):
         raise FileNotFoundError(f"Video file not found: {input_video_path}")
 
-    is_normal_mode = (mode or "baseball").lower().strip() in ["normal", "general"] or (perspective or "").lower().strip() in ["normal", "general"]
-    show_strike_zone = not is_normal_mode
-
-    renderer = PitchRenderer(graphic_style=graphic_style)
-
-    # 1. Track ball throughout video
     report = progress or (lambda stage, pct: None)  # (stage, 0..1) for the UI's progress screen
     report("Queued", 0.0)  # another upload may hold the tracker
     with _TRACK_LOCK:
@@ -103,25 +187,23 @@ def process_pitch_video(
         gpu = getattr(getattr(tracker, "model", None), "gpu_name", None)
         compute = f"{gpu} (GPU worker)" if gpu and not tracker.model.using_fallback else "this computer"
 
+    is_normal_mode = _is_normal(mode, resolved_perspective)
     if not trajectory_points:
         # Clean No-Pitch handling (e.g. windup drill, truncated clip, or aborted take)
         os.makedirs(os.path.dirname(os.path.abspath(output_video_path)), exist_ok=True)
         report("Rendering video", 0.85)
-        out_w, out_h = renderer.render_complete_video(
+        out_w, out_h = PitchRenderer(graphic_style=graphic_style).render_complete_video(
             input_video_path=input_video_path,
             output_video_path=output_video_path,
             trajectory_points=[],
             velocity_mph=0.0,
             vert_break_in=0.0,
             horz_break_in=0.0,
-            strike_zone=None,
-            call_result=None,
             pitch_number=pitch_number,
             pitch_tag="No Pitch",
             flight_time_ms=0.0,
             show_strike_zone=False,
             graphic_style=graphic_style,
-            trim_to_pitch=False,
             hud_style=hud_style,
             max_dimension=max_dimension,
         )
@@ -130,16 +212,13 @@ def process_pitch_video(
             "pitch_detected": False,
             "compute": compute,
             "mode": "normal" if is_normal_mode else "baseball",
-            "show_strike_zone": show_strike_zone,
+            "show_strike_zone": not is_normal_mode,
             "pitch_number": pitch_number,
             "velocity_mph": 0.0,
             "velocity_kmh": 0.0,
             "plate_velocity_mph": 0.0,
             "plate_velocity_kmh": 0.0,
             "flight_time_ms": 0.0,
-            "effective_distance_ft": distance_ft,
-            "coverage_fraction": 0.0,
-            "sport": "baseball",
             "vert_break_in": 0.0,
             "horz_break_in": 0.0,
             "pitch_tag": "No Pitch",
@@ -150,156 +229,47 @@ def process_pitch_video(
             "plate_crossing": None,
             "graphic_style": graphic_style,
             "ball_type": ball_type,
-            "perspective": perspective,
+            "perspective": resolved_perspective,
             "release_frame": 0,
             "plate_frame": 0,
             "elapsed_frames": 0,
             "fps": fps,
             "video_resolution": {"width": out_w, "height": out_h},
             "output_video_path": output_video_path,
-            "trajectory": []
+            "trajectory": [],
         }
 
-    # Only trim if trajectory is excessively long (> 1.5 seconds)
+    # A pitch lasts well under 1.5s: keep the 1.5s stretch that moves the most
     max_flight_frames = int(round(1.5 * fps))
     if len(trajectory_points) > max_flight_frames:
-        best_disp = -1
-        best_idx = 0
-        for i in range(len(trajectory_points) - max_flight_frames + 1):
-            p0 = trajectory_points[i]
-            p1 = trajectory_points[i + max_flight_frames - 1]
-            disp = (p1.x - p0.x)**2 + (p1.y - p0.y)**2
-            if disp > best_disp:
-                best_disp = disp
-                best_idx = i
-        trajectory_points = trajectory_points[best_idx : best_idx + max_flight_frames]
+        span = max_flight_frames - 1
+        best = max(range(len(trajectory_points) - span),
+                   key=lambda i: (trajectory_points[i + span].x - trajectory_points[i].x) ** 2
+                   + (trajectory_points[i + span].y - trajectory_points[i].y) ** 2)
+        trajectory_points = trajectory_points[best:best + max_flight_frames]
 
-    is_normal_mode = (mode or "baseball").lower().strip() in ["normal", "general"] or resolved_perspective in ["normal", "general"]
-
-    # 2. Strike zone: user-set > detected home plate (17in wide sets px/in) > uncalibrated guess
-    zone_calibrated = True
+    # Strike zone: user-set > detected home plate (17in wide sets px/in) > uncalibrated guess (no call)
+    zone_calibrated, show_strike_zone = True, not is_normal_mode
     if custom_strike_zone:
-        strike_zone = StrikeZone(
-            x_min=custom_strike_zone["x_min"],
-            y_min=custom_strike_zone["y_min"],
-            x_max=custom_strike_zone["x_max"],
-            y_max=custom_strike_zone["y_max"],
-        )
+        strike_zone = StrikeZone(**{k: float(custom_strike_zone[k]) for k in ("x_min", "y_min", "x_max", "y_max")})
         show_strike_zone = True
     elif is_normal_mode:
         strike_zone = StrikeZone.get_preset_zone(width, height, view_type="behind_catcher")
-        show_strike_zone = False
     elif plate:
         px, py, pw = plate
         strike_zone = StrikeZone.from_batter_height(BATTER_HEIGHT_IN, px, py, pixels_per_inch=pw / PLATE_WIDTH_IN)
-        show_strike_zone = True
     else:
         strike_zone = StrikeZone.get_preset_zone(width, height, view_type=resolved_perspective)
-        show_strike_zone = True
         zone_calibrated = False
 
-    # 3. Physically Grounded Timing & Aerodynamic Velocity
-    release_frame = trajectory_points[0].frame_idx
-    plate_frame = trajectory_points[-1].frame_idx
-    elapsed_frames = max(1, plate_frame - release_frame)
-
-    # Measured elapsed flight time
-    cov = 1.0
-
-    vel_data = calculate_advanced_velocity(
-        distance_ft=distance_ft,
-        elapsed_frames=float(elapsed_frames),
-        fps=fps,
-        coverage_fraction=cov,
-        ball_type=ball_type
+    result = _analyze_and_render(
+        input_video_path, output_video_path, trajectory_points, fps, width, height, strike_zone, zone_calibrated,
+        is_normal_mode, show_strike_zone, distance_ft, ball_type, resolved_perspective, pitch_number,
+        graphic_style, trim_to_pitch, hud_style, max_dimension, report,
     )
-
-    velocity_mph = vel_data["release_velocity_mph"]
-    velocity_kmh = vel_data["release_velocity_kmh"]
-    plate_velocity_mph = vel_data["plate_velocity_mph"]
-    plate_velocity_kmh = vel_data["plate_velocity_kmh"]
-    flight_time_ms = vel_data["flight_time_ms"]
-
-    # 4. Pitch Movement & Break
-    coords = [(p.x, p.y) for p in trajectory_points]
-    px_per_in = strike_zone.width / PLATE_WIDTH_IN  # zone is 17in wide: calibrated zone -> real inches
-    horz_break_in, vert_break_in = calculate_pitch_break(coords, pixels_per_inch=px_per_in)
-
-    pitch_tag = "Ball Flight" if is_normal_mode else classify_pitch_type(velocity_mph, vert_break_in, horz_break_in)
-    call_result = judge_pitch(trajectory_points, strike_zone, is_normal_mode, zone_calibrated)
-    plate_pt = (call_result.plate_x, call_result.plate_y)
-
-    # 5. Render final Pitch Lab video
-    os.makedirs(os.path.dirname(os.path.abspath(output_video_path)), exist_ok=True)
-    report("Rendering video", 0.85)
-    out_w, out_h = renderer.render_complete_video(
-        input_video_path=input_video_path,
-        output_video_path=output_video_path,
-        trajectory_points=trajectory_points,
-        velocity_mph=velocity_mph,
-        vert_break_in=vert_break_in,
-        horz_break_in=horz_break_in,
-        strike_zone=strike_zone,
-        call_result=call_result if zone_calibrated or is_normal_mode else None,
-        pitch_number=pitch_number,
-        pitch_tag=pitch_tag,
-        flight_time_ms=flight_time_ms,
-        show_strike_zone=show_strike_zone and zone_calibrated,
-        graphic_style=graphic_style,
-        trim_to_pitch=trim_to_pitch,
-        hud_style=hud_style,
-        max_dimension=max_dimension,
-    )
-
-    scale_x = out_w / float(width) if width > 0 else 1.0
-    scale_y = out_h / float(height) if height > 0 else 1.0
-
+    result["compute"] = compute
     report("Done", 1.0)
-    return {
-        "pitch_detected": True,
-        "compute": compute,
-        "mode": "normal" if is_normal_mode else "baseball",
-        "show_strike_zone": show_strike_zone,
-        "pitch_number": pitch_number,
-        "velocity_mph": velocity_mph,
-        "velocity_pm_mph": round(velocity_mph / elapsed_frames, 1),  # +-1 frame of whole-frame timing
-        "velocity_kmh": velocity_kmh,
-        "plate_velocity_mph": plate_velocity_mph,
-        "plate_velocity_kmh": plate_velocity_kmh,
-        "flight_time_ms": flight_time_ms,
-        "effective_distance_ft": vel_data["effective_distance_ft"],
-        "coverage_fraction": vel_data["coverage_fraction"],
-        "sport": vel_data["sport"],
-        "vert_break_in": vert_break_in,
-        "horz_break_in": horz_break_in,
-        "pitch_tag": pitch_tag,
-        "is_strike": call_result.is_strike,
-        "call": call_result.call,
-        "zone_calibrated": zone_calibrated,
-        "strike_zone": {
-            "x_min": round(strike_zone.x_min * scale_x, 1),
-            "y_min": round(strike_zone.y_min * scale_y, 1),
-            "x_max": round(strike_zone.x_max * scale_x, 1),
-            "y_max": round(strike_zone.y_max * scale_y, 1),
-        },
-        "plate_crossing": {
-            "x": round(plate_pt[0] * scale_x, 1),
-            "y": round(plate_pt[1] * scale_y, 1),
-        },
-        "graphic_style": graphic_style,
-        "ball_type": ball_type,
-        "perspective": resolved_perspective,
-        "release_frame": release_frame,
-        "plate_frame": plate_frame,
-        "elapsed_frames": elapsed_frames,
-        "fps": fps,
-        "video_resolution": {"width": out_w, "height": out_h},
-        "output_video_path": output_video_path,
-        "trajectory": [
-            {"frame": p.frame_idx, "x": round(p.x * scale_x, 1), "y": round(p.y * scale_y, 1)}
-            for p in trajectory_points
-        ]
-    }
+    return result
 
 
 def rerender_pitch(
@@ -321,25 +291,22 @@ def rerender_pitch(
     batter_height_in: float = BATTER_HEIGHT_IN,
 ) -> dict:
     """
-    Fast re-render using existing tracked trajectory and updated strike zone or graphic theme.
-    Supports both Baseball Pitch Mode and Normal / Any Video Mode.
+    Fast re-render of an already tracked trajectory with a new strike zone or graphic style.
+    The UI sends rendered-video pixels; everything here works in source pixels like process_pitch_video.
     """
+    if not trajectory:
+        raise ValueError("A tracked trajectory is required to re-render.")
     cap = cv2.VideoCapture(input_video_path)
     fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     cap.release()
 
-    # The UI speaks the rendered video's pixels; work in source pixels like process_pitch_video
     out_w, out_h = output_size(width, height, max_dimension)
     sx, sy = out_w / float(width), out_h / float(height)
-    pts = [
-        TrajectoryPoint(frame_idx=int(p["frame"]), x=float(p["x"]) / sx, y=float(p["y"]) / sy, conf=0.9)
-        for p in trajectory
-    ]
+    pts = [TrajectoryPoint(frame_idx=int(p["frame"]), x=float(p["x"]) / sx, y=float(p["y"]) / sy, conf=0.9) for p in trajectory]
 
-    is_normal_mode = (mode or "baseball").lower().strip() in ["normal", "general"] or (perspective or "").lower().strip() in ["normal", "general"]
-
+    is_normal_mode = _is_normal(mode, perspective)
     if show_strike_zone is None:
         show_strike_zone = not is_normal_mode
 
@@ -357,92 +324,8 @@ def rerender_pitch(
     else:
         strike_zone = StrikeZone.get_preset_zone(width, height, view_type="behind_catcher")
 
-    release_frame = pts[0].frame_idx
-    plate_frame = pts[-1].frame_idx
-    elapsed_frames = max(1, plate_frame - release_frame)
-
-    # Measured elapsed flight time
-    cov = 1.0
-
-    vel_data = calculate_advanced_velocity(
-        distance_ft=distance_ft,
-        elapsed_frames=float(elapsed_frames),
-        fps=fps,
-        coverage_fraction=cov,
-        ball_type=ball_type
+    return _analyze_and_render(
+        input_video_path, output_video_path, pts, fps, width, height, strike_zone, zone_calibrated,
+        is_normal_mode, show_strike_zone, distance_ft, ball_type, perspective, pitch_number,
+        graphic_style, trim_to_pitch, hud_style, max_dimension, lambda stage, pct: None,
     )
-
-    velocity_mph = vel_data["release_velocity_mph"]
-    velocity_kmh = vel_data["release_velocity_kmh"]
-    plate_velocity_mph = vel_data["plate_velocity_mph"]
-    plate_velocity_kmh = vel_data["plate_velocity_kmh"]
-    flight_time_ms = vel_data["flight_time_ms"]
-
-    coords = [(p.x, p.y) for p in pts]
-    px_per_in = strike_zone.width / PLATE_WIDTH_IN  # zone is 17in wide: calibrated zone -> real inches
-    horz_break_in, vert_break_in = calculate_pitch_break(coords, pixels_per_inch=px_per_in)
-
-    pitch_tag = "Ball Flight" if is_normal_mode else classify_pitch_type(velocity_mph, vert_break_in, horz_break_in)
-    call_result = judge_pitch(pts, strike_zone, is_normal_mode, zone_calibrated)
-    plate_pt = (call_result.plate_x, call_result.plate_y)
-
-    renderer = PitchRenderer(graphic_style=graphic_style)
-    out_w, out_h = renderer.render_complete_video(
-        input_video_path=input_video_path,
-        output_video_path=output_video_path,
-        trajectory_points=pts,
-        velocity_mph=velocity_mph,
-        vert_break_in=vert_break_in,
-        horz_break_in=horz_break_in,
-        strike_zone=strike_zone,
-        call_result=call_result if zone_calibrated or is_normal_mode else None,
-        pitch_number=pitch_number,
-        pitch_tag=pitch_tag,
-        flight_time_ms=flight_time_ms,
-        show_strike_zone=show_strike_zone and zone_calibrated,
-        graphic_style=graphic_style,
-        trim_to_pitch=trim_to_pitch,
-        hud_style=hud_style,
-        max_dimension=max_dimension,
-    )
-
-    return {
-        "pitch_number": pitch_number,
-        "mode": "normal" if is_normal_mode else "baseball",
-        "show_strike_zone": show_strike_zone,
-        "velocity_mph": velocity_mph,
-        "velocity_pm_mph": round(velocity_mph / elapsed_frames, 1),  # +-1 frame of whole-frame timing
-        "velocity_kmh": velocity_kmh,
-        "plate_velocity_mph": plate_velocity_mph,
-        "plate_velocity_kmh": plate_velocity_kmh,
-        "flight_time_ms": flight_time_ms,
-        "effective_distance_ft": vel_data["effective_distance_ft"],
-        "coverage_fraction": vel_data["coverage_fraction"],
-        "sport": vel_data["sport"],
-        "vert_break_in": vert_break_in,
-        "horz_break_in": horz_break_in,
-        "pitch_tag": pitch_tag,
-        "is_strike": call_result.is_strike,
-        "call": call_result.call,
-        "zone_calibrated": zone_calibrated,
-        "strike_zone": {
-            "x_min": round(strike_zone.x_min * sx, 1),
-            "y_min": round(strike_zone.y_min * sy, 1),
-            "x_max": round(strike_zone.x_max * sx, 1),
-            "y_max": round(strike_zone.y_max * sy, 1),
-        },
-        "plate_crossing": {
-            "x": round(plate_pt[0] * sx, 1),
-            "y": round(plate_pt[1] * sy, 1),
-        },
-        "graphic_style": graphic_style,
-        "ball_type": ball_type,
-        "perspective": perspective,
-        "release_frame": release_frame,
-        "plate_frame": plate_frame,
-        "elapsed_frames": elapsed_frames,
-        "fps": fps,
-        "video_resolution": {"width": out_w, "height": out_h},
-        "output_video_path": output_video_path,
-        "trajectory": trajectory,
-    }

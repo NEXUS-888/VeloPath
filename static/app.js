@@ -110,6 +110,9 @@ document.addEventListener('DOMContentLoaded', () => {
         w: 180,
         h: 210
     };
+    // True once the zone is real: set by the user (drag, Apply, plate taps) or calibrated by the server.
+    // Until then the box is only a starting guess and must not be sent, or the server would make a call on it.
+    let zoneUserSet = false;
 
     function setTrackingMode(mode) {
         activeTrackingMode = mode;
@@ -361,7 +364,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function checkLiveStrikeCall() {
-        if (!currentPitchData?.plate_crossing) return;
+        if (!currentPitchData?.plate_crossing || !zoneUserSet) return;  // no live call on a guessed box
         const x_min = strikeZone.cx - (strikeZone.w / 2.0);
         const x_max = strikeZone.cx + (strikeZone.w / 2.0);
         const y_min = strikeZone.cy - (strikeZone.h / 2.0);
@@ -484,6 +487,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const deltaVidX = ((e.clientX - startMouseX) * (geom.vidW / geom.renderW)) / (currentZoom || 1.0);
         const deltaVidY = ((e.clientY - startMouseY) * (geom.vidH / geom.renderH)) / (currentZoom || 1.0);
 
+        zoneUserSet = true;
         if (activeAction === 'drag') {
             strikeZone.cx = Math.max(10, Math.min(geom.vidW - 10, startZone.cx + deltaVidX));
             strikeZone.cy = Math.max(10, Math.min(geom.vidH - 10, startZone.cy + deltaVidY));
@@ -697,6 +701,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Call State
         updateCallState(data.is_strike, pitchDetected, data.zone_calibrated !== false);
+        zoneUserSet = data.zone_calibrated === true;
 
         // Synchronize Strike Zone
         if (data.strike_zone && data.show_strike_zone !== false && activeTrackingMode !== 'normal') {
@@ -738,12 +743,12 @@ document.addEventListener('DOMContentLoaded', () => {
             video_id: currentPitchData.video_id || 'sample',
             trajectory: currentPitchData.trajectory,
             distance_ft: getSelectedDistance(),
-            custom_strike_zone: {
+            custom_strike_zone: zoneUserSet ? {
                 x_min: strikeZone.cx - (strikeZone.w / 2.0),
                 y_min: strikeZone.cy - (strikeZone.h / 2.0),
                 x_max: strikeZone.cx + (strikeZone.w / 2.0),
                 y_max: strikeZone.cy + (strikeZone.h / 2.0),
-            },
+            } : null,
             graphic_style: activeGraphicStyle,
             ball_type: ballType,
             perspective: activePerspective,
@@ -777,8 +782,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    applyZoneChangesBtn.addEventListener('click', () => applyStrikeZoneChanges());
-    dockApplyBtn.addEventListener('click', () => applyStrikeZoneChanges());
+    // Apply = "this box is my zone"; theme / distance changes re-render without claiming a zone
+    applyZoneChangesBtn.addEventListener('click', () => { zoneUserSet = true; applyStrikeZoneChanges(); });
+    dockApplyBtn.addEventListener('click', () => { zoneUserSet = true; applyStrikeZoneChanges(); });
 
     // 15b. Plate calibration: tap the plate's two front corners (17in apart) on a paused frame
     let plateTaps = null;  // null = not tapping; else corners collected so far, in rendered-video pixels

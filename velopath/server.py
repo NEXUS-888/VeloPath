@@ -7,24 +7,17 @@ import re
 import shutil
 import time
 import uuid
+import glob
 import json
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException, Request, Response, status
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, StreamingResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator
 
 from velopath.pipeline import process_pitch_video, rerender_pitch
 
 app = FastAPI(title="VeloPath AI", version="1.0.0")
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STATIC_DIR = os.path.join(BASE_DIR, "static")
@@ -71,7 +64,9 @@ def process_sample_pitch():
     meta_file = os.path.join(OUTPUTS_DIR, "velopath_sample_meta.json")
     out_file = os.path.join(OUTPUTS_DIR, "velopath_sample_result.mp4")
 
-    if os.path.exists(meta_file) and os.path.exists(out_file):
+    # the cached demo result is only valid for the code that produced it
+    code_mtime = max(os.path.getmtime(p) for p in glob.glob(os.path.join(BASE_DIR, "velopath", "*.py")))
+    if os.path.exists(meta_file) and os.path.exists(out_file) and os.path.getmtime(meta_file) > code_mtime:
         try:
             with open(meta_file, "r", encoding="utf-8") as f:
                 return JSONResponse(json.load(f))
@@ -98,7 +93,7 @@ def process_sample_pitch():
 
 class RerenderPayload(BaseModel):
     video_id: str
-    trajectory: list
+    trajectory: list = Field(min_length=2)  # [{"frame", "x", "y"}] from /api/process
     distance_ft: float = 60.5
     custom_strike_zone: Optional[dict] = None
     graphic_style: str = "statcast_cyan"

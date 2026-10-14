@@ -80,8 +80,14 @@ def test_stream_video_cannot_escape_outputs(client, name):
 
 
 def test_rerender_rejects_unsafe_video_id(client):
-    res = client.post("/api/rerender", json={"video_id": "", "trajectory": []})
+    traj = [{"frame": 1, "x": 1, "y": 1}, {"frame": 2, "x": 2, "y": 2}]
+    res = client.post("/api/rerender", json={"video_id": "", "trajectory": traj})
     assert res.status_code == 404
+
+
+def test_rerender_rejects_missing_trajectory(client):
+    res = client.post("/api/rerender", json={"video_id": "sample", "trajectory": []})
+    assert res.status_code == 422
 
 
 def test_processing_does_not_block_other_requests(monkeypatch, tmp_path):
@@ -136,3 +142,22 @@ def test_process_passes_pitch_window_to_pipeline(tmp_path, monkeypatch):
     monkeypatch.setattr(server, "UPLOADS_DIR", str(tmp_path))
     res = TestClient(app).post("/api/process", files={"file": ("a.mp4", b"x")}, data={"start_s": "1.5", "end_s": "2.75"})
     assert res.status_code == 200 and got["time_window"] == (1.5, 2.75)
+
+
+def test_sample_cache_is_rebuilt_when_code_is_newer(tmp_path, monkeypatch):
+    """A cached demo result must not outlive a code change (it once served a stale always-STRIKE result)."""
+    import json
+    import velopath.server as server
+    monkeypatch.setattr(server, "OUTPUTS_DIR", str(tmp_path))
+    meta, out = tmp_path / "velopath_sample_meta.json", tmp_path / "velopath_sample_result.mp4"
+    meta.write_text(json.dumps({"call": "STALE"}))
+    out.write_bytes(b"x")
+    calls = []
+    monkeypatch.setattr(server, "process_pitch_video", lambda **kw: calls.append(1) or {"call": "FRESH"})
+    monkeypatch.setattr(server.os.path, "exists", lambda p: True if str(p).endswith("sample_pitch.mp4") else os.path.isfile(p))
+
+    os.utime(meta, (1, 1))  # cache older than the code
+    assert TestClient(app).get("/api/sample").json()["call"] == "FRESH" and calls == [1]
+    future = 4102444800  # cache newer than the code
+    os.utime(meta, (future, future))
+    assert TestClient(app).get("/api/sample").json()["call"] == "FRESH" and calls == [1]  # served from cache, no rerun

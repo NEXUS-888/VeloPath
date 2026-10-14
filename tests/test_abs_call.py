@@ -189,3 +189,12 @@ def test_pipeline_hands_pitch_window_to_tracker(blank_video, tmp_path):
     with patch("velopath.pipeline.get_tracker", WindowTracker):
         process_pitch_video(blank_video, str(tmp_path / "o.mp4"), max_dimension=None, time_window=(0.2, 0.9))
     assert got["time_window"] == (0.2, 0.9)
+
+
+def test_process_and_rerender_return_the_same_fields(blank_video, tmp_path):
+    """Both go through one analysis path, so the UI never sees a field vanish after a re-render."""
+    first = run(blank_video, tmp_path, flight(320, 240), PLATE)
+    again = rerender_pitch(blank_video, str(tmp_path / "again.mp4"), first["trajectory"], 60.5,
+                           first["strike_zone"], max_dimension=None)
+    assert set(first) - {"compute"} == set(again)
+    assert (again["call"], again["velocity_mph"]) == (first["call"], first["velocity_mph"])
