@@ -58,3 +58,12 @@ def test_pipeline_reports_stages_in_order(tmp_path):
     assert stages.index("Tracking ball") < stages.index("Rendering video")
     assert seen[-1] == ("Done", 1.0)
     assert [p for _, p in seen] == sorted(p for _, p in seen)
+
+
+def test_small_model_is_found_only_when_present(tmp_path, monkeypatch):
+    import velopath.model_manager as mm
+    monkeypatch.setattr(mm, "get_project_root", lambda: str(tmp_path))
+    assert mm.resolve_small_model_path() is None
+    (tmp_path / "models").mkdir()
+    (tmp_path / "models" / "ball_small_yolo11s.pt").write_bytes(b"x")
+    assert mm.resolve_small_model_path() == str(tmp_path / "models" / "ball_small_yolo11s.pt")

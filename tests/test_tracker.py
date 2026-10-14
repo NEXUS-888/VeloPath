@@ -340,3 +340,28 @@ def test_time_window_limits_tracking_to_the_marked_pitch(tmp_path):
     pts, _, _ = _bare_tracker(model).track_video(clip, time_window=(0.5, 1.2))
     assert len(seen) <= 22
     assert (pts[0].frame_idx, pts[-1].frame_idx) == (15, 36)
+
+
+def test_small_scan_model_scans_full_frames_and_big_model_refines(tmp_path):
+    """Hybrid: the small fast model scans whole frames at 1280 (its training size);
+    the big model only re-checks small windows along the path."""
+    path = {f: (40 + 15 * (f - 10), 60 + 6 * (f - 10)) for f in range(10, 41)}
+    clip = str(tmp_path / "h.mp4")
+    _write_clip(clip, 640, 360, path, 60)
+    calls = {"small": [], "big": []}
+
+    def recorder(model, name):
+        orig = model.predict
+
+        def predict(img, imgsz=640, **kw):
+            calls[name].append((img.shape[:2], imgsz))
+            return orig(img, imgsz=imgsz, **kw)
+        model.predict = predict
+        return model
+
+    tracker = _bare_tracker(recorder(_BlobYolo((360, 640)), "big"))
+    tracker.scan_model = recorder(_BlobYolo((360, 640)), "small")
+    pts, _, _ = tracker.track_video(clip)
+    assert calls["small"] and all(shape == (360, 640) and sz == 1280 for shape, sz in calls["small"])
+    assert calls["big"] and all(shape != (360, 640) for shape, _ in calls["big"])  # big model: windows only
+    assert (pts[0].frame_idx, pts[-1].frame_idx) == (10, 40)

@@ -103,6 +103,12 @@ def reassemble_from_parts(target_path: str) -> Optional[str]:
     return None
 
 
+def resolve_small_model_path() -> Optional[str]:
+    """The small fast YOLO11s ball model (trained in Colab, see training/), if it has been added to models/."""
+    path = os.path.join(get_project_root(), "models", "ball_small_yolo11s.pt")
+    return path if os.path.exists(path) else None
+
+
 def resolve_model_path(auto_download: bool = True) -> Optional[str]:
     """
     Finds the model weights on disk, reassembles from repo parts, or downloads them.

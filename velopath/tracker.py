@@ -183,6 +183,17 @@ class PitchTracker:
             self.model = connect_remote(os.path.join(get_project_root(), "gpu_worker.json"), fallback=self.model) or self.model
 
         self._normal_model = None
+        # hybrid: if the small fast model is present it scans whole frames; the big model above refines windows
+        self.scan_model = None
+        try:
+            from velopath.model_manager import resolve_small_model_path
+            small = resolve_small_model_path()
+            if small:
+                from ultralytics import YOLO
+                self.scan_model = YOLO(small, task="detect")
+                print(f"[PitchTracker] Fast scan model: {small}")
+        except Exception as e:
+            print(f"[PitchTracker] Note: small scan model not used: {e}")
 
     def _get_model(self, is_normal: bool = False):
         if is_normal:
@@ -451,11 +462,15 @@ class PitchTracker:
         is_normal = (mode or "baseball").lower().strip() in ["normal", "general"] or raw_persp in ["normal", "general"]
         model = self._get_model(is_normal)
         classes = self._get_target_classes(model, is_normal)
+        small = getattr(self, "scan_model", None)
+        scanner = small if small is not None and not is_normal else model
         # home plate rides along in the ball scan for free; it anchors the strike zone (pipeline)
-        plate_cls = None if is_normal or model is None else next(
-            (int(k) for k, v in getattr(model, "names", {}).items() if str(v).lower() == "homeplate"), None)
+        plate_cls = None if is_normal or scanner is None else next(
+            (int(k) for k, v in getattr(scanner, "names", {}).items() if str(v).lower() == "homeplate"), None)
         scan_classes = classes + [plate_cls] if classes is not None and plate_cls is not None else classes
-        scan_sz = 640  # full-frame scan only seeds the flight; _refine_flight restores native resolution
+        # full-frame scan only seeds the flight; _refine_flight restores native resolution.
+        # The small model was trained at 1280 and is cheap enough to scan there.
+        scan_sz = 1280 if scanner is not model else 640
         stride = 1 if hi - lo <= 300 else 2
 
         yolo_hits, motion_hits, plates = [], [], []
@@ -466,7 +481,7 @@ class PitchTracker:
                 break
             if f % stride == 0:
                 if model is not None:
-                    for x, y, c, w, k in self._yolo_hits(model, frame, scan_classes, scan_sz, conf_thresh):
+                    for x, y, c, w, k in self._yolo_hits(scanner, frame, scan_classes, scan_sz, conf_thresh):
                         if k == plate_cls:
                             plates.append((x, y, w))
                         else:
