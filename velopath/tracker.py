@@ -70,7 +70,7 @@ def interpolate_missing_frames(
         if int_f in frame_map:
             result.append(frame_map[int_f])
         else:
-            result.append(TrajectoryPoint(frame_idx=int_f, x=float(x), y=float(y), conf=0.6))
+            result.append(TrajectoryPoint(frame_idx=int_f, x=float(x), y=float(y), conf=0.6, radius=0.0))  # size not measured
 
     return result
 
@@ -535,6 +535,6 @@ class PitchTracker:
             else:
                 self.last_resolved_perspective = "broadcast" if abs(dx) > abs(dy) else ("behind_catcher" if dy > 0 else "behind_pitcher")
 
-        points = [TrajectoryPoint(frame_idx=int(f), x=float(x), y=float(y), conf=float(c), radius=max(4.0, float(w) / 2.0))
+        points = [TrajectoryPoint(frame_idx=int(f), x=float(x), y=float(y), conf=float(c), radius=float(w) / 2.0)
                   for f, x, y, c, w in flight]
         return interpolate_missing_frames(points, points[0].frame_idx, points[-1].frame_idx), fps, (width, height)

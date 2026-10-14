@@ -107,12 +107,14 @@ class RerenderPayload(BaseModel):
     # two front corners of home plate tapped on the rendered video, [[x, y], [x, y]]
     plate_corners: Optional[List[Annotated[List[float], Field(min_length=2, max_length=2)]]] = Field(None, min_length=2, max_length=2)
     batter_height_in: float = Field(72.0, ge=36.0, le=96.0)
+    # two ends of the pitching rubber; with plate_corners this enables the 3D speed / break fit
+    rubber_corners: Optional[List[Annotated[List[float], Field(min_length=2, max_length=2)]]] = Field(None, min_length=2, max_length=2)
 
-    @field_validator("plate_corners")
+    @field_validator("plate_corners", "rubber_corners")
     @classmethod
     def corners_apart(cls, v):
         if v and v[0] == v[1]:
-            raise ValueError("plate corners must be two different points")
+            raise ValueError("the two taps must be different points")
         return v
 
 
@@ -227,6 +229,7 @@ def rerender_existing_pitch(payload: RerenderPayload):
             show_strike_zone=payload.show_strike_zone,
             plate_corners=payload.plate_corners,
             batter_height_in=payload.batter_height_in,
+            rubber_corners=payload.rubber_corners,
         )
         result["video_id"] = payload.video_id
         result["video_url"] = f"/api/video/{output_filename}"

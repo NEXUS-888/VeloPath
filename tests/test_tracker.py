@@ -365,3 +365,10 @@ def test_small_scan_model_scans_full_frames_and_big_model_refines(tmp_path):
     assert calls["small"] and all(shape == (360, 640) and sz == 1280 for shape, sz in calls["small"])
     assert calls["big"] and all(shape != (360, 640) for shape, _ in calls["big"])  # big model: windows only
     assert (pts[0].frame_idx, pts[-1].frame_idx) == (10, 40)
+
+
+def test_interpolated_points_carry_no_ball_size():
+    """Gap-filled frames were never measured: size 0 so the 3D fit ignores them; measured sizes are kept as-is."""
+    pts = [TrajectoryPoint(frame_idx=0, x=0, y=0, radius=3.0), TrajectoryPoint(frame_idx=4, x=40, y=40, radius=2.5)]
+    out = interpolate_missing_frames(pts, 0, 4)
+    assert [p.radius for p in out] == [3.0, 0.0, 0.0, 0.0, 2.5]

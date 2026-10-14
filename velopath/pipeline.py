@@ -8,7 +8,8 @@ import threading
 import cv2
 
 from velopath.tracker import PitchTracker, TrajectoryPoint
-from velopath.physics import calculate_pitch_break, classify_pitch_type, calculate_advanced_velocity
+from velopath.physics import calculate_pitch_break, classify_pitch_type, calculate_advanced_velocity, calculate_velocity_kmh
+from velopath.geometry3d import Camera, camera_from_taps, fit_pitch_3d
 from velopath.strike_zone import StrikeZone, evaluate_pitch, PitchCallResult, PLATE_WIDTH_IN
 from velopath.renderer import PitchRenderer, output_size
 
@@ -72,15 +73,30 @@ def _analyze_and_render(
     hud_style: str,
     max_dimension: Optional[int],
     report: Callable[[str, float], None],
+    cam: Optional[Camera] = None,
 ) -> Dict[str, Any]:
     """Speed, break, call and the rendered video for a tracked flight (source pixels in, UI pixels out).
-    Shared by process_pitch_video and rerender_pitch so the two can never disagree."""
+    Shared by process_pitch_video and rerender_pitch so the two can never disagree.
+    With a camera from plate + rubber taps, speed and break come from a 3D fit (measurement "3d");
+    otherwise speed is distance / frames and break a 2D estimate (measurement "2d", no pitch-type guess)."""
     release_frame, plate_frame = pts[0].frame_idx, pts[-1].frame_idx
     elapsed_frames = max(1, plate_frame - release_frame)
     vel = calculate_advanced_velocity(distance_ft=distance_ft, elapsed_frames=float(elapsed_frames), fps=fps, ball_type=ball_type)
+    velocity_pm_mph = round(vel["release_velocity_mph"] / elapsed_frames, 1)  # +-1 frame of whole-frame timing
     px_per_in = strike_zone.width / PLATE_WIDTH_IN  # zone is 17in wide: calibrated zone -> real inches
     horz_break_in, vert_break_in = calculate_pitch_break([(p.x, p.y) for p in pts], pixels_per_inch=px_per_in)
-    pitch_tag = "Ball Flight" if is_normal_mode else classify_pitch_type(vel["release_velocity_mph"], vert_break_in, horz_break_in)
+    measured = [p for p in pts if p.radius > 0]  # frames where the ball's size was actually seen
+    fit = fit_pitch_3d([p.frame_idx for p in measured], [(p.x, p.y) for p in measured],
+                       [2 * p.radius for p in measured], fps, cam) if cam and not is_normal_mode else None
+    if fit:
+        vel.update(release_velocity_mph=fit["release_mph"], release_velocity_kmh=calculate_velocity_kmh(fit["release_mph"]),
+                   plate_velocity_mph=fit["plate_mph"], plate_velocity_kmh=calculate_velocity_kmh(fit["plate_mph"]),
+                   flight_time_ms=fit["flight_ms"])
+        velocity_pm_mph = fit["release_pm_mph"]
+        horz_break_in, vert_break_in = fit["hb_in"], fit["ivb_in"]  # induced vertical break: + = rise
+        pitch_tag = classify_pitch_type(fit["release_mph"], -fit["ivb_in"], fit["hb_in"])  # classifier wants drop
+    else:
+        pitch_tag = "Ball Flight" if is_normal_mode else "Pitch"  # a 2D break estimate is too weak to name pitches
     call_result = judge_pitch(pts, strike_zone, is_normal_mode, zone_calibrated)
 
     os.makedirs(os.path.dirname(os.path.abspath(output_video_path)), exist_ok=True)
@@ -111,7 +127,9 @@ def _analyze_and_render(
         "show_strike_zone": show_strike_zone,
         "pitch_number": pitch_number,
         "velocity_mph": vel["release_velocity_mph"],
-        "velocity_pm_mph": round(vel["release_velocity_mph"] / elapsed_frames, 1),  # +-1 frame of whole-frame timing
+        "velocity_pm_mph": velocity_pm_mph,
+        "measurement": "3d" if fit else "2d",
+        "fit_px_error": fit["fit_px_error"] if fit else None,
         "velocity_kmh": vel["release_velocity_kmh"],
         "plate_velocity_mph": vel["plate_velocity_mph"],
         "plate_velocity_kmh": vel["plate_velocity_kmh"],
@@ -140,7 +158,8 @@ def _analyze_and_render(
         "fps": fps,
         "video_resolution": {"width": out_w, "height": out_h},
         "output_video_path": output_video_path,
-        "trajectory": [{"frame": p.frame_idx, "x": round(p.x * sx, 1), "y": round(p.y * sy, 1)} for p in pts],
+        "trajectory": [{"frame": p.frame_idx, "x": round(p.x * sx, 1), "y": round(p.y * sy, 1),
+                        **({"d": round(2 * p.radius * sx, 2)} if p.radius > 0 else {})} for p in pts],
     }
 
 
@@ -289,6 +308,7 @@ def rerender_pitch(
     show_strike_zone: Optional[bool] = None,
     plate_corners: Optional[list] = None,
     batter_height_in: float = BATTER_HEIGHT_IN,
+    rubber_corners: Optional[list] = None,
 ) -> dict:
     """
     Fast re-render of an already tracked trajectory with a new strike zone or graphic style.
@@ -304,7 +324,8 @@ def rerender_pitch(
 
     out_w, out_h = output_size(width, height, max_dimension)
     sx, sy = out_w / float(width), out_h / float(height)
-    pts = [TrajectoryPoint(frame_idx=int(p["frame"]), x=float(p["x"]) / sx, y=float(p["y"]) / sy, conf=0.9) for p in trajectory]
+    pts = [TrajectoryPoint(frame_idx=int(p["frame"]), x=float(p["x"]) / sx, y=float(p["y"]) / sy, conf=0.9,
+                           radius=float(p.get("d") or 0.0) / 2.0 / sx) for p in trajectory]
 
     is_normal_mode = _is_normal(mode, perspective)
     if show_strike_zone is None:
@@ -324,8 +345,14 @@ def rerender_pitch(
     else:
         strike_zone = StrikeZone.get_preset_zone(width, height, view_type="behind_catcher")
 
+    # plate + rubber taps -> camera geometry for the 3D fit (None if the view can't resolve depth)
+    cam = None
+    if plate_corners and rubber_corners:
+        cam = camera_from_taps([(x / sx, y / sy) for x, y in plate_corners],
+                               [(x / sx, y / sy) for x, y in rubber_corners], (width, height))
+
     return _analyze_and_render(
         input_video_path, output_video_path, pts, fps, width, height, strike_zone, zone_calibrated,
         is_normal_mode, show_strike_zone, distance_ft, ball_type, perspective, pitch_number,
-        graphic_style, trim_to_pitch, hud_style, max_dimension, lambda stage, pct: None,
+        graphic_style, trim_to_pitch, hud_style, max_dimension, lambda stage, pct: None, cam=cam,
     )

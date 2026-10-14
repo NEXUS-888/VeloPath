@@ -161,3 +161,10 @@ def test_sample_cache_is_rebuilt_when_code_is_newer(tmp_path, monkeypatch):
     future = 4102444800  # cache newer than the code
     os.utime(meta, (future, future))
     assert TestClient(app).get("/api/sample").json()["call"] == "FRESH" and calls == [1]  # served from cache, no rerun
+
+
+@pytest.mark.parametrize("extra", [{"rubber_corners": [[1, 2]]}, {"rubber_corners": [[5, 5], [5, 5]]}])
+def test_rerender_rejects_bad_rubber_taps(client, extra):
+    traj = [{"frame": 1, "x": 1, "y": 1}, {"frame": 2, "x": 2, "y": 2}]
+    res = client.post("/api/rerender", json={"video_id": "sample", "trajectory": traj, **extra})
+    assert res.status_code == 422
