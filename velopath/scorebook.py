@@ -37,8 +37,21 @@ class Game:
         return {**self._state(), "away": self.away, "home": self.home, "innings": self.innings,
                 "runs": list(self.runs())}
 
+    def dump(self) -> dict:
+        """Everything needed to resume after a restart, undo history included."""
+        return {**self.to_dict(), "history": copy.deepcopy(self.history)}
+
+    @classmethod
+    def load(cls, d: dict) -> "Game":
+        g = cls(d["away"], d["home"], d["innings"])
+        for k in ("inning", "top", "outs", "balls", "strikes", "bases", "line", "awaiting_play", "over", "winner", "log"):
+            setattr(g, k, copy.deepcopy(d[k]))
+        g.history = copy.deepcopy(d.get("history", []))
+        return g
+
     # ---- actions ----
-    def pitch(self, kind: str) -> None:
+    def pitch(self, kind: str, info: Optional[dict] = None) -> None:
+        """info (e.g. the measured mph, who made the call) is stored with the log entry."""
         if kind not in PITCHES:
             raise ValueError(f"unknown pitch {kind!r}")
         self._guard(playing=True)
@@ -57,7 +70,7 @@ class Game:
             self._walk()
         else:
             self.awaiting_play = True
-        self._record(kind)
+        self._record(kind, info)
 
     def play(self, outcome: str) -> None:
         if outcome not in PLAYS:
@@ -129,9 +142,9 @@ class Game:
     def _push(self) -> None:
         self.history.append(self._state())
 
-    def _record(self, kind: str) -> None:
+    def _record(self, kind: str, info: Optional[dict] = None) -> None:
         self.log.append({"inning": self.inning, "top": self.top, "kind": kind, "balls": self.balls,
-                         "strikes": self.strikes, "outs": self.outs, "runs": list(self.runs())})
+                         "strikes": self.strikes, "outs": self.outs, "runs": list(self.runs()), **(info or {})})
 
     def _reset_count(self) -> None:
         self.balls = self.strikes = 0

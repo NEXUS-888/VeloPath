@@ -260,3 +260,16 @@ def test_to_dict_is_json_ready_and_logs_each_event():
     d = json.loads(json.dumps(g.to_dict()))
     assert d["away"] == "Lions" and d["home"] == "Tigers" and d["bases"] == [True, False, False]
     assert [e["kind"] for e in d["log"]] == ["ball", "in_play", "single"]
+
+
+def test_dump_and_load_keep_state_and_undo_history():
+    import json
+    g = Game(away="Lions", home="Tigers", innings=7)
+    g.pitch("ball")
+    g.pitch("in_play")
+    g.play("double")
+    copy = Game.load(json.loads(json.dumps(g.dump())))
+    assert copy.to_dict() == g.to_dict() and copy.innings == 7
+    copy.undo()
+    copy.undo()
+    assert copy.count == (1, 0) and copy.bases == [False] * 3  # history came along

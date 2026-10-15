@@ -168,3 +168,52 @@ def test_rerender_rejects_bad_rubber_taps(client, extra):
     traj = [{"frame": 1, "x": 1, "y": 1}, {"frame": 2, "x": 2, "y": 2}]
     res = client.post("/api/rerender", json={"video_id": "sample", "trajectory": traj, **extra})
     assert res.status_code == 422
+
+
+@pytest.fixture
+def games_dir(tmp_path, monkeypatch):
+    import velopath.server as server
+    monkeypatch.setattr(server, "GAMES_DIR", str(tmp_path))
+    server.GAMES.clear()
+    yield tmp_path
+    server.GAMES.clear()
+
+
+def test_game_flow_over_the_api(client, games_dir):
+    g = client.post("/api/games", json={"away": "Lions", "home": "Tigers", "innings": 7}).json()
+    gid = g["id"]
+    assert g["state"]["innings"] == 7 and g["state"]["balls"] == 0
+    for kind in ("ball", "strike", "in_play"):
+        assert client.post(f"/api/games/{gid}/pitch", json={"kind": kind}).status_code == 200
+    s = client.post(f"/api/games/{gid}/play", json={"outcome": "single"}).json()
+    assert s["bases"] == [True, False, False] and s["balls"] == 0
+    s = client.post(f"/api/games/{gid}/adjust", json={"bases": [False, True, False], "runs": 1}).json()
+    assert s["runs"] == [1, 0] and s["bases"] == [False, True, False]
+    assert client.post(f"/api/games/{gid}/undo").json()["runs"] == [0, 0]
+    assert client.get(f"/api/games/{gid}").json()["bases"] == [True, False, False]
+
+
+def test_game_rules_errors_are_409_and_bad_input_is_422(client, games_dir):
+    gid = client.post("/api/games", json={}).json()["id"]
+    assert client.post(f"/api/games/{gid}/play", json={"outcome": "single"}).status_code == 409  # nothing in play
+    assert client.post(f"/api/games/{gid}/pitch", json={"kind": "spitball"}).status_code == 422
+    assert client.post("/api/games", json={"innings": 0}).status_code == 422
+    assert client.post(f"/api/games/{gid}/adjust", json={"bases": [True]}).status_code == 422
+    assert client.get("/api/games/doesnotexist").status_code == 404
+    assert client.get("/api/games/..%5Cx").status_code in (404, 422)
+
+
+def test_games_survive_a_server_restart(client, games_dir):
+    import velopath.server as server
+    gid = client.post("/api/games", json={"away": "Lions"}).json()["id"]
+    client.post(f"/api/games/{gid}/pitch", json={"kind": "ball"})
+    server.GAMES.clear()  # restart: memory gone, the file remains
+    s = client.get(f"/api/games/{gid}").json()
+    assert s["balls"] == 1 and s["away"] == "Lions"
+    assert client.post(f"/api/games/{gid}/undo").json()["balls"] == 0  # and so does the undo history
+
+
+def test_pitch_can_carry_the_measured_pitch_into_the_log(client, games_dir):
+    gid = client.post("/api/games", json={}).json()["id"]
+    s = client.post(f"/api/games/{gid}/pitch", json={"kind": "strike", "mph": 84.5, "source": "abs"}).json()
+    assert s["log"][-1]["mph"] == 84.5 and s["log"][-1]["source"] == "abs"

@@ -1,10 +1,11 @@
 """
 FastAPI Server for VeloPath AI: Web-based pitch tracking, speed analysis & strike zone umpiring.
 """
-from typing import Annotated, List, Optional
+from typing import Annotated, List, Literal, Optional
 import os
 import re
 import shutil
+import threading
 import time
 import uuid
 import glob
@@ -15,6 +16,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
 
 from velopath.pipeline import process_pitch_video, rerender_pitch
+from velopath.scorebook import Game, PITCHES, PLAYS
 
 app = FastAPI(title="VeloPath AI", version="1.0.0")
 
@@ -23,6 +25,7 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STATIC_DIR = os.path.join(BASE_DIR, "static")
 OUTPUTS_DIR = os.path.join(BASE_DIR, "outputs")
 UPLOADS_DIR = os.path.join(BASE_DIR, "uploads")
+GAMES_DIR = os.path.join(BASE_DIR, "games")
 
 os.makedirs(OUTPUTS_DIR, exist_ok=True)
 os.makedirs(UPLOADS_DIR, exist_ok=True)
@@ -30,6 +33,8 @@ os.makedirs(UPLOADS_DIR, exist_ok=True)
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 PROGRESS = {}  # job_id -> {"stage", "pct", "started"} while /api/process runs; polled by the UI
+GAMES = {}  # game_id -> Game (memory copy; every change is also written to GAMES_DIR/<id>.json)
+_GAMES_LOCK = threading.Lock()
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -194,6 +199,99 @@ def job_progress(job_id: str):
     if job is None:
         raise HTTPException(status_code=404, detail="No running job with that id.")
     return {"stage": job["stage"], "pct": round(100 * job["pct"]), "elapsed_s": round(time.monotonic() - job["started"], 1)}
+
+
+# ---- game scorebook: count / outs / runners / score, one JSON file per game so a restart loses nothing ----
+class NewGame(BaseModel):
+    away: str = Field("Away", min_length=1, max_length=40)
+    home: str = Field("Home", min_length=1, max_length=40)
+    innings: int = Field(9, ge=1, le=20)
+
+
+class PitchBody(BaseModel):
+    kind: Literal[PITCHES]
+    mph: Optional[float] = Field(None, ge=0, le=130)
+    source: Optional[Literal["abs", "manual"]] = None  # "abs": the strike-zone call made it; "manual": a person
+
+
+class PlayBody(BaseModel):
+    outcome: Literal[PLAYS]
+
+
+class AdjustBody(BaseModel):
+    bases: Optional[List[bool]] = Field(None, min_length=3, max_length=3)
+    runs: int = Field(0, ge=0, le=10)
+    outs: int = Field(0, ge=0, le=3)
+
+
+def _game_path(game_id: str) -> str:
+    return os.path.join(GAMES_DIR, f"{game_id}.json")
+
+
+def _load_game(game_id: str) -> Game:
+    if not re.fullmatch(r"[A-Za-z0-9]{1,32}", game_id):
+        raise HTTPException(status_code=404, detail="Game not found.")
+    if game_id not in GAMES:
+        try:
+            with open(_game_path(game_id), encoding="utf-8") as f:
+                GAMES[game_id] = Game.load(json.load(f))
+        except FileNotFoundError:
+            raise HTTPException(status_code=404, detail="Game not found.")
+    return GAMES[game_id]
+
+
+def _save_game(game_id: str, game: Game) -> dict:
+    os.makedirs(GAMES_DIR, exist_ok=True)
+    tmp = _game_path(game_id) + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(game.dump(), f)
+    os.replace(tmp, _game_path(game_id))  # a crash mid-write never leaves a half-written game
+    return game.to_dict()
+
+
+def _game_action(game_id: str, action) -> dict:
+    with _GAMES_LOCK:
+        game = _load_game(game_id)
+        try:
+            action(game)
+        except ValueError as e:  # a rule: nothing in play, game over, ...
+            raise HTTPException(status_code=409, detail=str(e))
+        return _save_game(game_id, game)
+
+
+@app.post("/api/games")
+def new_game(body: NewGame):
+    game_id = uuid.uuid4().hex[:8]
+    with _GAMES_LOCK:
+        GAMES[game_id] = Game(body.away, body.home, body.innings)
+        return {"id": game_id, "state": _save_game(game_id, GAMES[game_id])}
+
+
+@app.get("/api/games/{game_id}")
+def get_game(game_id: str):
+    with _GAMES_LOCK:
+        return _load_game(game_id).to_dict()
+
+
+@app.post("/api/games/{game_id}/pitch")
+def game_pitch(game_id: str, body: PitchBody):
+    info = {k: v for k, v in (("mph", body.mph), ("source", body.source)) if v is not None}
+    return _game_action(game_id, lambda g: g.pitch(body.kind, info))
+
+
+@app.post("/api/games/{game_id}/play")
+def game_play(game_id: str, body: PlayBody):
+    return _game_action(game_id, lambda g: g.play(body.outcome))
+
+
+@app.post("/api/games/{game_id}/adjust")
+def game_adjust(game_id: str, body: AdjustBody):
+    return _game_action(game_id, lambda g: g.adjust(body.bases, body.runs, body.outs))
+
+
+@app.post("/api/games/{game_id}/undo")
+def game_undo(game_id: str):
+    return _game_action(game_id, lambda g: g.undo())
 
 
 @app.post("/api/rerender")
