@@ -145,8 +145,8 @@ document.addEventListener('DOMContentLoaded', () => {
             if (modeNormalBtn) modeNormalBtn.className = 'mode-btn px-3 py-1.5 rounded-lg text-xs font-bold bg-pitchcyan text-black shadow-sm transition flex items-center gap-1.5';
             if (modeBaseballBtn) modeBaseballBtn.className = 'mode-btn px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:text-white transition flex items-center gap-1.5';
             if (modeStatusPill) {
-                modeStatusPill.textContent = '🎯 Normal Video Mode';
-                modeStatusPill.className = 'text-[10px] font-semibold text-pitchcyan px-2 py-0.5 rounded-full bg-pitchcyan/10 border border-pitchcyan/20';
+                modeStatusPill.textContent = 'FULL-FRAME MOTION';
+                modeStatusPill.className = 'text-[10px] font-mono font-bold text-pitchcyan px-2 py-0.5 rounded bg-pitchcyan/10 border border-pitchcyan/20 uppercase tracking-wider';
             }
             if (modeDescriptionText) {
                 modeDescriptionText.textContent = 'Tracks full-frame ball throws, high arcs, tosses, and catches in any direction without baseball constraints.';
@@ -157,8 +157,8 @@ document.addEventListener('DOMContentLoaded', () => {
             if (modeBaseballBtn) modeBaseballBtn.className = 'mode-btn px-3 py-1.5 rounded-lg text-xs font-bold bg-pitchcyan text-black shadow-sm transition flex items-center gap-1.5';
             if (modeNormalBtn) modeNormalBtn.className = 'mode-btn px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:text-white transition flex items-center gap-1.5';
             if (modeStatusPill) {
-                modeStatusPill.textContent = '⚾ Baseball ABS Mode';
-                modeStatusPill.className = 'text-[10px] font-semibold text-pitchcyan px-2 py-0.5 rounded-full bg-pitchcyan/10 border border-pitchcyan/20';
+                modeStatusPill.textContent = 'ABS STRIKE ZONE';
+                modeStatusPill.className = 'text-[10px] font-mono font-bold text-pitchcyan px-2 py-0.5 rounded bg-pitchcyan/10 border border-pitchcyan/20 uppercase tracking-wider';
             }
             if (modeDescriptionText) {
                 modeDescriptionText.textContent = 'Pitch tunnel gating, 60.5ft ABS strike zone, and Statcast 3D streamline.';

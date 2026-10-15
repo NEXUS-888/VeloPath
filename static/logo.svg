@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100%" height="100%">
+  <defs>
+    <linearGradient id="vpGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00F5FF"/>
+      <stop offset="100%" stop-color="#00A3FF"/>
+    </linearGradient>
+    <linearGradient id="trailGrad" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#00E5FF" stop-opacity="0"/>
+      <stop offset="50%" stop-color="#00E5FF" stop-opacity="0.8"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="1"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Deep Obsidian Substrate with Specular Hairline Edge -->
+  <rect width="100" height="100" rx="22" fill="#06080C"/>
+  <rect width="98" height="98" x="1" y="1" rx="21" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
+
+  <!-- Precision Ballistic Arc sweeping through radar field -->
+  <path d="M 20 74 C 32 70, 48 56, 62 26" fill="none" stroke="url(#trailGrad)" stroke-width="3" stroke-linecap="round"/>
+
+  <!-- High-Precision Monogram V: Bold Supersonic Geometry -->
+  <!-- Left Wing: Crisp White -->
+  <polygon points="22,28 32,28 50,78 40,78" fill="#FFFFFF"/>
+  <!-- Right Wing: Statcast Electric Cyan -->
+  <polygon points="44,78 54,78 82,28 72,28" fill="url(#vpGrad)"/>
+
+  <!-- Apex Strike Sensor: Focal Node at (62, 26) -->
+  <circle cx="62" cy="26" r="8" fill="none" stroke="#00E5FF" stroke-width="1.2" stroke-opacity="0.4"/>
+  <circle cx="62" cy="26" r="4.5" fill="#00E5FF"/>
+  <circle cx="62" cy="26" r="2" fill="#FFFFFF"/>
+</svg>

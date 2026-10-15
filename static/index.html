@@ -3,7 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VeloPath AI Studio - Baseball & Cricket Pitch Analytics & Automated Strike Zone</title>
+    <title>VeloPath Pro - High-Precision Baseball Pitch Kinematics & Automated Strike Zone</title>
+    <!-- Google Fonts: Inter & JetBrains Mono -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="icon" type="image/svg+xml" href="/static/logo.svg">
+    <link rel="icon" type="image/png" href="/static/logo.png">
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -11,6 +17,10 @@
             darkMode: 'class',
             theme: {
                 extend: {
+                    fontFamily: {
+                        sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'system-ui', 'sans-serif'],
+                        mono: ['"JetBrains Mono"', 'ui-monospace', 'monospace'],
+                    },
                     colors: {
                         pitchblack: '#06080C',
                         pitchdark: '#06080C',
@@ -39,28 +49,28 @@
         <div class="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
             
             <!-- Brand & App Identity -->
-            <div class="flex items-center space-x-3">
-                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-600 via-pitchcyan to-teal-300 flex items-center justify-center shadow-lg shadow-pitchcyan/20">
-                    <i data-lucide="activity" class="w-6 h-6 text-black font-black"></i>
+            <div class="flex items-center gap-3">
+                <div class="w-9 h-9 rounded-xl overflow-hidden border border-white/15 bg-black flex items-center justify-center shadow-sm">
+                    <img src="/static/logo.svg" alt="VeloPath Logo" class="w-full h-full object-contain">
                 </div>
                 <div>
-                    <h1 class="font-bold text-lg tracking-tight flex items-center gap-2">
-                        <span>Velo<span class="text-pitchcyan">Path</span></span>
-                        <span class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-pitchcyan/10 text-pitchcyan border border-pitchcyan/30 tracking-wide uppercase">Studio</span>
-                    </h1>
-                    <p class="text-[11px] text-slate-400">Computer Vision Pitch Kinematics & Automated Strike Zone</p>
+                    <div class="flex items-center gap-2 leading-none">
+                        <span class="font-black text-base tracking-tight text-white font-sans">VELO<span class="text-pitchcyan">PATH</span></span>
+                        <span class="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-white/5 text-slate-300 border border-white/10 uppercase tracking-wider">PRO 4.0</span>
+                    </div>
+                    <span class="text-[10px] text-slate-400 block tracking-tight mt-0.5 font-medium">Precision Pitch Kinematics & Automated Strike Zone</span>
                 </div>
             </div>
 
             <!-- Hardware & Action Header Items -->
-            <div class="flex items-center gap-3">
+            <div class="flex items-center gap-2.5">
                 <!-- View Mode Segmented Switcher (Overview vs Pro Studio) -->
-                <div class="flex items-center gap-1 bg-slate-900/90 p-1 rounded-xl border border-white/10">
-                    <button id="viewOverviewBtn" type="button" class="view-btn px-3 py-1.5 rounded-lg text-xs font-bold bg-pitchcyan text-black shadow-sm transition flex items-center gap-1.5">
+                <div class="flex items-center gap-1 bg-slate-900/90 p-1 rounded-lg border border-white/10">
+                    <button id="viewOverviewBtn" type="button" class="view-btn px-2.5 py-1 rounded text-xs font-bold bg-pitchcyan text-black shadow-sm transition flex items-center gap-1.5">
                         <i data-lucide="sparkles" class="w-3.5 h-3.5"></i>
                         <span>Overview</span>
                     </button>
-                    <button id="viewStudioBtn" type="button" class="view-btn px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:text-white transition flex items-center gap-1.5">
+                    <button id="viewStudioBtn" type="button" class="view-btn px-2.5 py-1 rounded text-xs font-semibold text-slate-400 hover:text-white transition flex items-center gap-1.5">
                         <i data-lucide="sliders" class="w-3.5 h-3.5"></i>
                         <span>Pro Studio</span>
                     </button>
@@ -77,20 +87,20 @@
                 <div class="h-4 w-px bg-white/10 hidden sm:block"></div>
 
                 <!-- Load Demo Pitch -->
-                <button id="samplePitchBtn" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-xs font-semibold text-slate-200 border border-white/10 shadow-sm transition">
+                <button id="samplePitchBtn" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-xs font-semibold text-slate-200 border border-white/10 shadow-sm transition btn-tactile">
                     <i data-lucide="play-circle" class="w-4 h-4 text-pitchcyan"></i>
                     <span>Demo Pitch</span>
                 </button>
 
                 <!-- Upload Video Button -->
-                <label for="videoUploadInput" class="flex items-center gap-2 px-4 py-1.5 rounded-lg bg-gradient-to-r from-pitchcyan to-cyan-400 hover:opacity-95 text-black font-bold text-xs shadow-md shadow-pitchcyan/20 cursor-pointer transition btn-tactile">
-                    <i data-lucide="upload" class="w-4 h-4"></i>
+                <label for="videoUploadInput" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs border border-white/15 transition cursor-pointer btn-tactile">
+                    <i data-lucide="upload" class="w-4 h-4 text-pitchcyan"></i>
                     <span>Upload Pitch</span>
                 </label>
                 <input type="file" id="videoUploadInput" accept="video/*" class="hidden">
 
                 <!-- Keyboard Shortcuts Help -->
-                <button id="helpModalBtn" title="Keyboard Shortcuts" class="p-1.5 rounded-lg bg-slate-800/60 hover:bg-slate-700 text-slate-400 hover:text-white transition">
+                <button id="helpModalBtn" title="Keyboard Shortcuts" class="p-1.5 rounded-lg bg-slate-900/60 hover:bg-slate-800 text-slate-400 hover:text-white border border-white/10 transition btn-tactile">
                     <i data-lucide="help-circle" class="w-4 h-4"></i>
                 </button>
             </div>
@@ -103,42 +113,42 @@
         <!-- ==========================================================================
              SECTION 1: Showcase Landing Page (#landingView)
              ========================================================================== -->
-        <section id="landingView" class="w-full flex flex-col gap-10 py-2">
+        <section id="landingView" class="w-full flex flex-col gap-8 py-2">
 
             <!-- Hero Section -->
-            <div class="flex flex-col items-center text-center max-w-4xl mx-auto pt-4 sm:pt-6">
+            <div class="flex flex-col items-center text-center max-w-3xl mx-auto pt-2 sm:pt-4">
                 <!-- Trust & Innovation Badge -->
-                <div class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-900/90 border border-pitchcyan/30 text-xs font-semibold text-slate-200 shadow-lg shadow-pitchcyan/5 mb-5">
-                    <span class="w-2 h-2 rounded-full bg-pitchcyan animate-pulse-dot"></span>
-                    <span class="text-pitchcyan font-bold tracking-wide uppercase text-[10px]">Next-Gen Pitch Telemetry</span>
-                    <span class="text-white/20">|</span>
-                    <span class="text-slate-300">MLB 17" Automated Strike Zone & 3D Flight Physics</span>
+                <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-900/90 border border-white/10 text-[11px] font-mono text-slate-300 shadow-sm mb-4">
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse-dot"></span>
+                    <span class="text-slate-200 font-semibold tracking-wide uppercase text-[10px]">TrackMan Kinematics</span>
+                    <span class="text-white/20">•</span>
+                    <span class="text-slate-400 text-[10px]">17" Pentagonal ABS Homography</span>
                 </div>
 
                 <!-- Main Value Proposition -->
-                <h1 class="text-3xl sm:text-5xl font-black tracking-tight text-white leading-[1.15] text-balance">
-                    Doppler-Grade Pitch Kinematics & <br class="hidden sm:inline">
-                    <span class="bg-gradient-to-r from-pitchcyan via-teal-300 to-cyan-400 bg-clip-text text-transparent">Automated ABS Strike Zone</span>
+                <h1 class="text-3xl sm:text-4xl md:text-5xl font-black tracking-tight text-white leading-tight font-sans text-balance">
+                    Precision Pitch Kinematics & <br class="hidden sm:inline">
+                    <span class="text-pitchcyan">Automated Strike Zone</span>
                 </h1>
 
-                <p class="text-sm sm:text-base text-slate-300 mt-4 max-w-2xl text-pretty leading-relaxed">
-                    Sub-pixel baseball & ball trajectory tracking, 3D aerodynamic drag decay, official 17" home plate calibration, and live digital scorekeeping directly in your browser. Zero heavy frameworks, 100% transparent kinematics.
+                <p class="text-xs sm:text-sm text-slate-400 mt-3 max-w-xl text-pretty font-normal leading-relaxed">
+                    Sub-pixel ball trajectory tracking, quadratic aerodynamic drag decay, official 17" home plate calibration, and live digital scorekeeping.
                 </p>
 
                 <!-- Primary Action Hub -->
-                <div class="flex flex-wrap items-center justify-center gap-3 mt-7">
-                    <button id="landingDemoBtn" type="button" class="px-5 py-3 rounded-xl bg-gradient-to-r from-pitchcyan to-cyan-400 hover:opacity-95 text-black font-extrabold text-sm shadow-xl shadow-pitchcyan/20 transition flex items-center gap-2 btn-tactile">
-                        <i data-lucide="play-circle" class="w-5 h-5 fill-black text-transparent"></i>
-                        <span>Try Instant Demo Pitch (60.5 ft)</span>
+                <div class="flex flex-wrap items-center justify-center gap-2.5 mt-6">
+                    <button id="landingDemoBtn" type="button" class="px-4 py-2.5 rounded-lg bg-pitchcyan hover:bg-cyan-300 text-black font-bold text-xs transition flex items-center gap-2 btn-tactile shadow-sm">
+                        <i data-lucide="play" class="w-4 h-4 fill-current"></i>
+                        <span>Try Instant Demo (60.5 ft)</span>
                     </button>
 
-                    <button id="landingUploadBtn" type="button" class="px-5 py-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-sm border border-white/15 transition flex items-center gap-2 btn-tactile">
+                    <button id="landingUploadBtn" type="button" class="px-4 py-2.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-200 font-semibold text-xs border border-white/15 transition flex items-center gap-2 btn-tactile">
                         <i data-lucide="upload" class="w-4 h-4 text-pitchcyan"></i>
                         <span>Upload Pitch Video</span>
                     </button>
 
-                    <button id="landingExploreStudioBtn" type="button" class="px-4 py-3 rounded-xl bg-slate-900/60 hover:bg-slate-800/80 text-slate-300 hover:text-white font-semibold text-sm border border-white/10 transition flex items-center gap-1.5 btn-tactile">
-                        <i data-lucide="sliders" class="w-4 h-4"></i>
+                    <button id="landingExploreStudioBtn" type="button" class="px-3.5 py-2.5 rounded-lg bg-slate-900/60 hover:bg-slate-800 text-slate-400 hover:text-white font-medium text-xs border border-white/10 transition flex items-center gap-1.5 btn-tactile">
+                        <i data-lucide="sliders" class="w-3.5 h-3.5"></i>
                         <span>Open Pro Studio</span>
                     </button>
                 </div>
@@ -146,123 +156,116 @@
 
             <!-- Interactive Pitch Visualizer Teaser (SVG/Canvas Live Demo) -->
             <div class="w-full max-w-5xl mx-auto">
-                <div class="video-viewport-wrapper relative aspect-[16/9] max-h-[500px] w-full flex items-center justify-center bg-black overflow-hidden select-none border border-white/15 shadow-2xl">
+                <div class="video-viewport-wrapper relative aspect-[16/9] max-h-[500px] w-full flex items-center justify-center bg-black overflow-hidden select-none border border-white/10 shadow-2xl">
                     
                     <!-- SVG 3D Perspective Pitch Tunnel Simulation -->
                     <svg id="teaserSvg" viewBox="0 0 960 540" class="w-full h-full">
                         <defs>
                             <radialGradient id="moundGlow" cx="50%" cy="30%" r="50%">
-                                <stop offset="0%" stop-color="#00E5FF" stop-opacity="0.25"/>
-                                <stop offset="100%" stop-color="#06080C" stop-opacity="0"/>
+                                <stop offset="0%" stop-color="#00E5FF" stop-opacity="0.18"/>
+                                <stop offset="100%" stop-color="#050608" stop-opacity="0"/>
                             </radialGradient>
                             <linearGradient id="strikeZoneGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-                                <stop offset="0%" stop-color="rgba(0, 229, 255, 0.22)"/>
-                                <stop offset="100%" stop-color="rgba(0, 229, 255, 0.04)"/>
+                                <stop offset="0%" stop-color="rgba(0, 229, 255, 0.15)"/>
+                                <stop offset="100%" stop-color="rgba(0, 229, 255, 0.02)"/>
                             </linearGradient>
-                            <filter id="glowFilter" x="-20%" y="-20%" width="140%" height="140%">
-                                <feGaussianBlur stdDeviation="3.5" result="blur"/>
-                                <feMerge>
-                                    <feMergeNode in="blur"/>
-                                    <feMergeNode in="SourceGraphic"/>
-                                </feMerge>
-                            </filter>
                         </defs>
 
                         <!-- Ambient Stadium Lighting -->
-                        <rect width="960" height="540" fill="#06080C"/>
+                        <rect width="960" height="540" fill="#050608"/>
                         <circle cx="480" cy="180" r="320" fill="url(#moundGlow)"/>
 
                         <!-- Perspective Pitch Tunnel Lines from 60.5ft Mound to Plate -->
-                        <g stroke="rgba(255, 255, 255, 0.08)" stroke-width="1.5">
+                        <g stroke="rgba(255, 255, 255, 0.06)" stroke-width="1.2">
                             <line x1="120" y1="520" x2="480" y2="220"/>
                             <line x1="840" y1="520" x2="480" y2="220"/>
                             <line x1="280" y1="520" x2="480" y2="220"/>
                             <line x1="680" y1="520" x2="480" y2="220"/>
                             <!-- Distance markers -->
-                            <line x1="430" y1="260" x2="530" y2="260" stroke="rgba(255, 255, 255, 0.12)"/>
-                            <line x1="380" y1="310" x2="580" y2="310" stroke="rgba(255, 255, 255, 0.12)"/>
-                            <line x1="320" y1="370" x2="640" y2="370" stroke="rgba(255, 255, 255, 0.12)"/>
-                            <line x1="240" y1="440" x2="720" y2="440" stroke="rgba(255, 255, 255, 0.12)"/>
+                            <line x1="430" y1="260" x2="530" y2="260" stroke="rgba(255, 255, 255, 0.10)"/>
+                            <line x1="380" y1="310" x2="580" y2="310" stroke="rgba(255, 255, 255, 0.10)"/>
+                            <line x1="320" y1="370" x2="640" y2="370" stroke="rgba(255, 255, 255, 0.10)"/>
+                            <line x1="240" y1="440" x2="720" y2="440" stroke="rgba(255, 255, 255, 0.10)"/>
                         </g>
 
                         <!-- Pitching Rubber (60.5 ft) -->
-                        <rect x="455" y="218" width="50" height="4" fill="#FFFFFF" opacity="0.75" rx="1"/>
+                        <rect x="455" y="218" width="50" height="4" fill="#FFFFFF" opacity="0.8" rx="1"/>
                         <text x="480" y="210" fill="#64748B" font-size="10" font-weight="700" text-anchor="middle" letter-spacing="1">MOUND 60.5 FT</text>
 
                         <!-- Home Plate Pentagon (17 inches) -->
-                        <polygon points="480,500 535,465 535,435 425,435 425,465" fill="#FFFFFF" opacity="0.85" stroke="#00E5FF" stroke-width="2"/>
+                        <polygon points="480,500 535,465 535,435 425,435 425,465" fill="#FFFFFF" opacity="0.9" stroke="#00E5FF" stroke-width="1.5"/>
 
                         <!-- 3x3 Automated Strike Zone Plane (ABS Radar Grid) -->
                         <g id="teaserZoneGroup">
-                            <rect id="teaserZoneRect" x="390" y="260" width="180" height="210" rx="4" fill="url(#strikeZoneGrad)" stroke="#00E5FF" stroke-width="2" filter="url(#glowFilter)"/>
+                            <rect id="teaserZoneRect" x="390" y="260" width="180" height="210" rx="3" fill="url(#strikeZoneGrad)" stroke="#00E5FF" stroke-width="1.8"/>
                             <!-- 3x3 Radar Grid Hairlines -->
-                            <line x1="450" y1="260" x2="450" y2="470" stroke="rgba(0, 229, 255, 0.35)" stroke-width="1"/>
-                            <line x1="510" y1="260" x2="510" y2="470" stroke="rgba(0, 229, 255, 0.35)" stroke-width="1"/>
-                            <line x1="390" y1="330" x2="570" y2="330" stroke="rgba(0, 229, 255, 0.35)" stroke-width="1"/>
-                            <line x1="390" y1="400" x2="570" y2="400" stroke="rgba(0, 229, 255, 0.35)" stroke-width="1"/>
+                            <line x1="450" y1="260" x2="450" y2="470" stroke="rgba(0, 229, 255, 0.30)" stroke-width="1"/>
+                            <line x1="510" y1="260" x2="510" y2="470" stroke="rgba(0, 229, 255, 0.30)" stroke-width="1"/>
+                            <line x1="390" y1="330" x2="570" y2="330" stroke="rgba(0, 229, 255, 0.30)" stroke-width="1"/>
+                            <line x1="390" y1="400" x2="570" y2="400" stroke="rgba(0, 229, 255, 0.30)" stroke-width="1"/>
                         </g>
 
                         <!-- Animated Trajectory Spline & Particle Path -->
-                        <path id="teaserFlightPath" d="M 480 220 Q 484 310 495 355" fill="none" stroke="#00E5FF" stroke-width="3.5" filter="url(#glowFilter)"/>
+                        <path id="teaserFlightPath" d="M 480 220 Q 484 310 495 355" fill="none" stroke="#00E5FF" stroke-width="2.8"/>
 
                         <!-- Crossing Impact Crosshair & Ball Marker -->
-                        <circle id="teaserImpactCircle" cx="495" cy="355" r="9" fill="#00E676" stroke="#FFFFFF" stroke-width="2.5" filter="url(#glowFilter)"/>
-                        <circle id="teaserImpactInner" cx="495" cy="355" r="5" fill="none" stroke="#06080C" stroke-width="1.5" opacity="0.6"/>
+                        <circle id="teaserImpactCircle" cx="495" cy="355" r="8" fill="#00E676" stroke="#FFFFFF" stroke-width="2"/>
+                        <circle id="teaserImpactInner" cx="495" cy="355" r="4.5" fill="none" stroke="#050608" stroke-width="1.5" opacity="0.6"/>
                     </svg>
 
                     <!-- Floating Live Telemetry Badge (Top-Left) -->
-                    <div class="absolute top-4 left-4 glass-pill px-3.5 py-2 rounded-xl flex items-center gap-3 z-20 pointer-events-none">
+                    <div class="absolute top-3 left-3 glass-pill px-3 py-1.5 rounded-lg flex items-center gap-3 z-20 pointer-events-none">
                         <div>
-                            <span class="text-[10px] font-bold text-slate-400 block tracking-wider uppercase">Release Speed</span>
+                            <span class="text-[9px] font-mono font-bold text-slate-400 block tracking-wider uppercase">Release Speed</span>
                             <div class="flex items-baseline gap-1">
-                                <span id="teaserVelocityVal" class="text-xl font-black text-white tabular-nums">99.4</span>
+                                <span id="teaserVelocityVal" class="text-lg font-black text-white tabular-nums font-mono">99.4</span>
                                 <span class="text-[10px] font-bold text-pitchcyan uppercase">MPH</span>
                             </div>
                         </div>
-                        <div class="h-6 w-px bg-white/15"></div>
+                        <div class="h-5 w-px bg-white/10"></div>
                         <div>
-                            <span class="text-[10px] font-bold text-slate-400 block tracking-wider uppercase">Plate Speed</span>
+                            <span class="text-[9px] font-mono font-bold text-slate-400 block tracking-wider uppercase">Plate Speed</span>
                             <div class="flex items-baseline gap-1">
-                                <span id="teaserPlateVal" class="text-lg font-bold text-slate-300 tabular-nums">91.8</span>
-                                <span class="text-[10px] font-semibold text-slate-400 uppercase">MPH</span>
+                                <span id="teaserPlateVal" class="text-base font-bold text-slate-300 tabular-nums font-mono">91.8</span>
+                                <span class="text-[9px] font-semibold text-slate-400 uppercase">MPH</span>
                             </div>
                         </div>
-                        <div class="h-6 w-px bg-white/15"></div>
+                        <div class="h-5 w-px bg-white/10"></div>
                         <div>
-                            <span class="text-[10px] font-bold text-slate-400 block tracking-wider uppercase">Aerodynamic Drag</span>
-                            <span id="teaserDragVal" class="text-xs font-bold text-amber-400 tabular-nums">-7.6%</span>
+                            <span class="text-[9px] font-mono font-bold text-slate-400 block tracking-wider uppercase">Aerodynamic Drag</span>
+                            <span id="teaserDragVal" class="text-xs font-bold text-amber-400 tabular-nums font-mono">-7.6%</span>
                         </div>
                     </div>
 
                     <!-- Floating Umpire Decision Ribbon (Top-Right) -->
-                    <div class="absolute top-4 right-4 glass-pill px-3 py-1.5 rounded-xl z-20 flex items-center gap-2">
-                        <span id="teaserCallBadge" class="text-xs font-black tracking-wider uppercase px-2.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 glow-emerald">
+                    <div class="absolute top-3 right-3 glass-pill px-2.5 py-1 rounded-lg z-20 flex items-center gap-2">
+                        <span id="teaserCallBadge" class="text-[11px] font-mono font-bold tracking-wider uppercase px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
                             STRIKE (Quadrant 3)
                         </span>
                     </div>
 
                     <!-- Bottom Controls Overlay on Teaser -->
-                    <div class="absolute bottom-4 inset-x-4 flex flex-wrap items-center justify-between gap-2.5 z-20">
+                    <div class="absolute bottom-3 inset-x-3 flex flex-wrap items-center justify-between gap-2 z-20">
                         <!-- Pitch Type Selector Chips -->
-                        <div class="flex items-center gap-1.5 bg-slate-950/80 backdrop-blur-md p-1 rounded-xl border border-white/10">
-                            <button id="teaserPitchFastball" type="button" class="teaser-pitch-btn px-2.5 py-1 rounded-lg text-xs font-bold bg-pitchcyan text-black shadow-sm transition">
-                                ⚾ 4-Seam Fastball
+                        <div class="flex items-center gap-1 bg-slate-950/90 backdrop-blur-md p-1 rounded-lg border border-white/10">
+                            <button id="teaserPitchFastball" type="button" class="teaser-pitch-btn px-2.5 py-1 rounded text-xs font-bold bg-pitchcyan text-black shadow-sm transition btn-tactile">
+                                4-Seam Fastball
                             </button>
-                            <button id="teaserPitchSlider" type="button" class="teaser-pitch-btn px-2.5 py-1 rounded-lg text-xs font-medium text-slate-400 hover:text-white transition">
-                                ⚡ Slider
+                            <button id="teaserPitchSlider" type="button" class="teaser-pitch-btn px-2.5 py-1 rounded text-xs font-medium text-slate-400 hover:text-white transition btn-tactile">
+                                Slider
                             </button>
-                            <button id="teaserPitchCurve" type="button" class="teaser-pitch-btn px-2.5 py-1 rounded-lg text-xs font-medium text-slate-400 hover:text-white transition">
-                                🌀 12-6 Curve
+                            <button id="teaserPitchCurve" type="button" class="teaser-pitch-btn px-2.5 py-1 rounded text-xs font-medium text-slate-400 hover:text-white transition btn-tactile">
+                                12-6 Curve
                             </button>
                         </div>
 
                         <!-- Teaser Actions -->
                         <div class="flex items-center gap-2">
-                            <button id="teaserReplayBtn" type="button" class="px-3 py-1.5 rounded-xl bg-slate-900/90 hover:bg-slate-800 text-xs font-semibold text-slate-200 border border-white/10 transition flex items-center gap-1.5 btn-tactile">
+                            <button id="teaserReplayBtn" type="button" class="px-2.5 py-1 rounded-lg bg-slate-900/90 hover:bg-slate-800 text-xs font-semibold text-slate-200 border border-white/10 transition flex items-center gap-1.5 btn-tactile">
                                 <i data-lucide="rotate-ccw" class="w-3.5 h-3.5 text-pitchcyan"></i>
                                 <span>Replay</span>
                             </button>
-                            <button id="teaserLaunchStudioBtn" type="button" class="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-pitchcyan to-cyan-400 hover:opacity-95 text-black font-bold text-xs shadow-lg shadow-pitchcyan/20 transition flex items-center gap-1.5 btn-tactile">
+                            <button id="teaserLaunchStudioBtn" type="button" class="px-3 py-1 rounded-lg bg-pitchcyan hover:bg-cyan-300 text-black font-bold text-xs shadow-sm transition flex items-center gap-1.5 btn-tactile">
                                 <i data-lucide="sliders" class="w-3.5 h-3.5"></i>
                                 <span>Launch in Pro Studio</span>
                             </button>
@@ -271,42 +274,57 @@
                 </div>
             </div>
 
-            <!-- Live Engineering Capabilities Ticker / Marquee -->
-            <div class="w-full overflow-hidden border-y border-white/10 bg-slate-950/60 py-3 relative">
-                <div class="flex items-center whitespace-nowrap text-xs font-semibold tracking-wider uppercase text-slate-400 gap-8 animate-ticker">
-                    <span class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-pitchcyan"></span> 120+ FPS Sub-Pixel Tracking</span>
-                    <span class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Official 17" MLB ABS Strike Zone</span>
-                    <span class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span> 3D Aerodynamic Drag Decay ($v=d/t$)</span>
-                    <span class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-cyan-400"></span> Real-Time Digital Scorebook & Diamond SVG</span>
-                    <span class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-purple-400"></span> Fast 1-Second Re-Rendering Pipeline</span>
-                    <span class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-pitchcyan"></span> Zero Heavy Frameworks (Vanilla JS + Python)</span>
-                    <!-- Duplicate for infinite seamless scroll -->
-                    <span class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-pitchcyan"></span> 120+ FPS Sub-Pixel Tracking</span>
-                    <span class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Official 17" MLB ABS Strike Zone</span>
-                    <span class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span> 3D Aerodynamic Drag Decay ($v=d/t$)</span>
-                    <span class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-cyan-400"></span> Real-Time Digital Scorebook & Diamond SVG</span>
-                    <span class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-purple-400"></span> Fast 1-Second Re-Rendering Pipeline</span>
-                    <span class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-pitchcyan"></span> Zero Heavy Frameworks (Vanilla JS + Python)</span>
+            <!-- Hardware & Aerodynamic Specifications Ribbon -->
+            <div class="max-w-5xl mx-auto w-full grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                <div class="card-inner flex items-center gap-2.5 py-2.5 px-3">
+                    <span class="w-1.5 h-1.5 rounded-full bg-pitchcyan"></span>
+                    <div>
+                        <span class="text-[9px] font-mono font-bold text-slate-400 block tracking-wider uppercase">Frame Capture</span>
+                        <span class="text-xs font-bold text-white font-mono">120+ FPS Sub-Pixel</span>
+                    </div>
+                </div>
+                <div class="card-inner flex items-center gap-2.5 py-2.5 px-3">
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                    <div>
+                        <span class="text-[9px] font-mono font-bold text-slate-400 block tracking-wider uppercase">ABS Strike Zone</span>
+                        <span class="text-xs font-bold text-white font-mono">17" Pentagonal Homography</span>
+                    </div>
+                </div>
+                <div class="card-inner flex items-center gap-2.5 py-2.5 px-3">
+                    <span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+                    <div>
+                        <span class="text-[9px] font-mono font-bold text-slate-400 block tracking-wider uppercase">Aerodynamics</span>
+                        <span class="text-xs font-bold text-white font-mono">Drag Decay ($F_d$)</span>
+                    </div>
+                </div>
+                <div class="card-inner flex items-center gap-2.5 py-2.5 px-3">
+                    <span class="w-1.5 h-1.5 rounded-full bg-cyan-400"></span>
+                    <div>
+                        <span class="text-[9px] font-mono font-bold text-slate-400 block tracking-wider uppercase">Dugout Terminal</span>
+                        <span class="text-xs font-bold text-white font-mono">Real-Time Scorebook</span>
+                    </div>
                 </div>
             </div>
 
             <!-- Four Core Capabilities Bento Grid -->
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-5xl mx-auto w-full">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3.5 max-w-5xl mx-auto w-full">
                 <!-- Pillar 1: Sub-Pixel Tracking -->
                 <div class="card-outer flex flex-col justify-between">
                     <div>
-                        <div class="flex items-center justify-between mb-3">
-                            <div class="w-9 h-9 rounded-xl bg-pitchcyan/10 border border-pitchcyan/30 flex items-center justify-center text-pitchcyan">
-                                <i data-lucide="crosshair" class="w-5 h-5"></i>
+                        <div class="flex items-center justify-between mb-2.5">
+                            <div class="flex items-center gap-2">
+                                <div class="w-7 h-7 rounded-lg bg-pitchcyan/10 border border-pitchcyan/30 flex items-center justify-center text-pitchcyan">
+                                    <i data-lucide="crosshair" class="w-4 h-4"></i>
+                                </div>
+                                <h3 class="text-sm font-bold text-white">Sub-Pixel Ball Detection</h3>
                             </div>
-                            <span class="text-[10px] font-bold text-pitchcyan uppercase px-2 py-0.5 rounded-full bg-pitchcyan/10 border border-pitchcyan/20">Computer Vision</span>
+                            <span class="badge-tech px-2 py-0.5 rounded bg-pitchcyan/10 text-pitchcyan border border-pitchcyan/20">YOLOv8 + Optical Flow</span>
                         </div>
-                        <h3 class="text-base font-bold text-white">Sub-Pixel Ball Detection</h3>
-                        <p class="text-xs text-slate-400 mt-2 leading-relaxed">
-                            YOLOv8 neural network fine-tuned on high-velocity baseballs combined with Lucas-Kanade optical flow. Accurately tracks ball centroid through batter swings, dirt clouds, and catcher mitt occlusion.
+                        <p class="text-xs text-slate-400 leading-relaxed">
+                            YOLO neural detection fine-tuned on baseball flight sequences combined with Lucas-Kanade optical flow. Tracks ball centroid through swings and catcher mitt occlusion.
                         </p>
                     </div>
-                    <div class="card-inner mt-4 p-2.5 flex items-center justify-between text-[11px] font-mono text-slate-300">
+                    <div class="mt-3 pt-2.5 border-t border-white/5 flex items-center justify-between text-[11px] font-mono text-slate-400">
                         <span>Resolution: 1080p / 4K</span>
                         <span class="text-pitchcyan font-bold">±0.2 px Centroid</span>
                     </div>
@@ -315,19 +333,21 @@
                 <!-- Pillar 2: 3D Aerodynamics -->
                 <div class="card-outer flex flex-col justify-between">
                     <div>
-                        <div class="flex items-center justify-between mb-3">
-                            <div class="w-9 h-9 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
-                                <i data-lucide="gauge" class="w-5 h-5"></i>
+                        <div class="flex items-center justify-between mb-2.5">
+                            <div class="flex items-center gap-2">
+                                <div class="w-7 h-7 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
+                                    <i data-lucide="gauge" class="w-4 h-4"></i>
+                                </div>
+                                <h3 class="text-sm font-bold text-white">3D Aerodynamics & Drag</h3>
                             </div>
-                            <span class="text-[10px] font-bold text-amber-400 uppercase px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20">Newtonian Physics</span>
+                            <span class="badge-tech px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">Newtonian Physics</span>
                         </div>
-                        <h3 class="text-base font-bold text-white">3D Flight Kinematics & Drag</h3>
-                        <p class="text-xs text-slate-400 mt-2 leading-relaxed">
-                            Complete physical transparency. Integrates quadratic air resistance ($F_d = \frac{1}{2} \rho v^2 C_d A$) to calculate release velocity, plate velocity, and vertical/horizontal trajectory break with verifiable mathematical proofs.
+                        <p class="text-xs text-slate-400 leading-relaxed">
+                            Complete physical transparency. Integrates quadratic air resistance ($F_d = \frac{1}{2} \rho v^2 C_d A$) to calculate release velocity, plate velocity, and vertical/horizontal trajectory break.
                         </p>
                     </div>
-                    <div class="card-inner mt-4 p-2.5 flex items-center justify-between text-[11px] font-mono text-slate-300">
-                        <span>Formula: v = d / t × drag</span>
+                    <div class="mt-3 pt-2.5 border-t border-white/5 flex items-center justify-between text-[11px] font-mono text-slate-400">
+                        <span>Model: Runge-Kutta 3D</span>
                         <span class="text-amber-400 font-bold">±0.5 MPH Doppler</span>
                     </div>
                 </div>
@@ -335,18 +355,20 @@
                 <!-- Pillar 3: ABS Strike Zone -->
                 <div class="card-outer flex flex-col justify-between">
                     <div>
-                        <div class="flex items-center justify-between mb-3">
-                            <div class="w-9 h-9 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
-                                <i data-lucide="target" class="w-5 h-5"></i>
+                        <div class="flex items-center justify-between mb-2.5">
+                            <div class="flex items-center gap-2">
+                                <div class="w-7 h-7 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+                                    <i data-lucide="target" class="w-4 h-4"></i>
+                                </div>
+                                <h3 class="text-sm font-bold text-white">MLB ABS Automated Strike Zone</h3>
                             </div>
-                            <span class="text-[10px] font-bold text-emerald-400 uppercase px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20">Official Spec</span>
+                            <span class="badge-tech px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Official 17" Plate</span>
                         </div>
-                        <h3 class="text-base font-bold text-white">MLB ABS Automated Strike Zone</h3>
-                        <p class="text-xs text-slate-400 mt-2 leading-relaxed">
-                            Calibrated to official 17" pentagonal home plate dimensions and batter stance heights (53.5% top, 27% bottom). Automated ball/strike umpire calls with 3x3 quadrant grid and 2.5x close-up inspection zoom.
+                        <p class="text-xs text-slate-400 leading-relaxed">
+                            Calibrated to official 17" pentagonal home plate dimensions and batter stance heights (53.5% top, 27% bottom). Automated umpire calls with 3x3 quadrant grid and 2.5x close-up inspection zoom.
                         </p>
                     </div>
-                    <div class="card-inner mt-4 p-2.5 flex items-center justify-between text-[11px] font-mono text-slate-300">
+                    <div class="mt-3 pt-2.5 border-t border-white/5 flex items-center justify-between text-[11px] font-mono text-slate-400">
                         <span>Calibration: Corner Homography</span>
                         <span class="text-emerald-400 font-bold">17" Pentagonal ABS</span>
                     </div>
@@ -355,18 +377,20 @@
                 <!-- Pillar 4: Digital Dugout Scorebook -->
                 <div class="card-outer flex flex-col justify-between">
                     <div>
-                        <div class="flex items-center justify-between mb-3">
-                            <div class="w-9 h-9 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400">
-                                <i data-lucide="clipboard-list" class="w-5 h-5"></i>
+                        <div class="flex items-center justify-between mb-2.5">
+                            <div class="flex items-center gap-2">
+                                <div class="w-7 h-7 rounded-lg bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400">
+                                    <i data-lucide="clipboard-list" class="w-4 h-4"></i>
+                                </div>
+                                <h3 class="text-sm font-bold text-white">Digital Game Scorebook</h3>
                             </div>
-                            <span class="text-[10px] font-bold text-cyan-400 uppercase px-2 py-0.5 rounded-full bg-cyan-500/10 border border-cyan-500/20">Dugout Terminal</span>
+                            <span class="badge-tech px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">Dugout Terminal</span>
                         </div>
-                        <h3 class="text-base font-bold text-white">Digital Game Scorebook</h3>
-                        <p class="text-xs text-slate-400 mt-2 leading-relaxed">
+                        <p class="text-xs text-slate-400 leading-relaxed">
                             Automated live pitch feeding directly from the strike zone call into balls/strikes counts, 3-outs tracker, SVG base runner diamond, half-inning line score tables, and 1-tap CSV export.
                         </p>
                     </div>
-                    <div class="card-inner mt-4 p-2.5 flex items-center justify-between text-[11px] font-mono text-slate-300">
+                    <div class="mt-3 pt-2.5 border-t border-white/5 flex items-center justify-between text-[11px] font-mono text-slate-400">
                         <span>Export: CSV & Range MP4</span>
                         <span class="text-cyan-400 font-bold">Real-Time Scoring</span>
                     </div>
@@ -387,28 +411,28 @@
                         </div>
                         <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-2">
                             <button type="button" data-preset-dist="60.5" data-preset-mode="baseball" class="landing-preset-btn p-3 rounded-xl bg-slate-900/90 hover:bg-slate-800 border border-white/10 hover:border-pitchcyan/50 transition text-left group">
-                                <span class="text-sm font-bold text-white group-hover:text-pitchcyan transition block">⚾ MLB Baseball</span>
+                                <span class="text-xs font-bold text-white group-hover:text-pitchcyan transition flex items-center gap-1.5"><i data-lucide="target" class="w-3.5 h-3.5 text-pitchcyan"></i> MLB Regulation</span>
                                 <span class="text-[11px] text-slate-400 block mt-0.5">60.5 ft (18.4 m)</span>
                             </button>
                             <button type="button" data-preset-dist="58.0" data-preset-mode="baseball" data-preset-ball="tennis_cricket" class="landing-preset-btn p-3 rounded-xl bg-slate-900/90 hover:bg-slate-800 border border-white/10 hover:border-pitchcyan/50 transition text-left group">
-                                <span class="text-sm font-bold text-white group-hover:text-pitchcyan transition block">🏏 Cricket Pitch</span>
+                                <span class="text-xs font-bold text-white group-hover:text-pitchcyan transition flex items-center gap-1.5"><i data-lucide="compass" class="w-3.5 h-3.5 text-emerald-400"></i> Cricket Wicket</span>
                                 <span class="text-[11px] text-slate-400 block mt-0.5">58.0 ft (17.7 m)</span>
                             </button>
                             <button type="button" data-preset-dist="46.0" data-preset-mode="baseball" class="landing-preset-btn p-3 rounded-xl bg-slate-900/90 hover:bg-slate-800 border border-white/10 hover:border-pitchcyan/50 transition text-left group">
-                                <span class="text-sm font-bold text-white group-hover:text-pitchcyan transition block">⚾ Little League</span>
+                                <span class="text-xs font-bold text-white group-hover:text-pitchcyan transition flex items-center gap-1.5"><i data-lucide="shield" class="w-3.5 h-3.5 text-amber-400"></i> Little League</span>
                                 <span class="text-[11px] text-slate-400 block mt-0.5">46.0 ft (14.0 m)</span>
                             </button>
                             <button type="button" data-preset-dist="43.0" data-preset-mode="baseball" class="landing-preset-btn p-3 rounded-xl bg-slate-900/90 hover:bg-slate-800 border border-white/10 hover:border-pitchcyan/50 transition text-left group">
-                                <span class="text-sm font-bold text-white group-hover:text-pitchcyan transition block">🥎 Softball Fastpitch</span>
+                                <span class="text-xs font-bold text-white group-hover:text-pitchcyan transition flex items-center gap-1.5"><i data-lucide="activity" class="w-3.5 h-3.5 text-rose-400"></i> Softball Fastpitch</span>
                                 <span class="text-[11px] text-slate-400 block mt-0.5">43.0 ft (13.1 m)</span>
                             </button>
                             <button type="button" data-preset-dist="35.0" data-preset-mode="baseball" class="landing-preset-btn p-3 rounded-xl bg-slate-900/90 hover:bg-slate-800 border border-white/10 hover:border-pitchcyan/50 transition text-left group">
-                                <span class="text-sm font-bold text-white group-hover:text-pitchcyan transition block">🌳 Casual / Backyard</span>
+                                <span class="text-xs font-bold text-white group-hover:text-pitchcyan transition flex items-center gap-1.5"><i data-lucide="map-pin" class="w-3.5 h-3.5 text-slate-400"></i> Short Distance</span>
                                 <span class="text-[11px] text-slate-400 block mt-0.5">35.0 ft (10.7 m)</span>
                             </button>
                             <button type="button" data-preset-dist="60.5" data-preset-mode="normal" class="landing-preset-btn p-3 rounded-xl bg-slate-900/90 hover:bg-slate-800 border border-white/10 hover:border-pitchcyan/50 transition text-left group">
-                                <span class="text-sm font-bold text-white group-hover:text-pitchcyan transition block">🎯 Normal Video</span>
-                                <span class="text-[11px] text-slate-400 block mt-0.5">Full Frame Throws</span>
+                                <span class="text-xs font-bold text-white group-hover:text-pitchcyan transition flex items-center gap-1.5"><i data-lucide="video" class="w-3.5 h-3.5 text-cyan-400"></i> Full-Frame Motion</span>
+                                <span class="text-[11px] text-slate-400 block mt-0.5">General Throw Tracking</span>
                             </button>
                         </div>
                     </div>
@@ -444,7 +468,7 @@
                     <div>
                         <div class="text-xs font-bold text-white flex items-center gap-2">
                             <span>Tracking Engine</span>
-                            <span id="modeStatusPill" class="text-[10px] font-semibold text-pitchcyan px-2 py-0.5 rounded-full bg-pitchcyan/10 border border-pitchcyan/20">⚾ Baseball ABS Mode</span>
+                            <span id="modeStatusPill" class="text-[10px] font-mono font-bold text-pitchcyan px-2 py-0.5 rounded bg-pitchcyan/10 border border-pitchcyan/20 uppercase tracking-wider">ABS STRIKE ZONE</span>
                         </div>
                         <p id="modeDescriptionText" class="text-[11px] text-slate-400">Pitch tunnel gating, 60.5ft ABS strike zone, and Statcast 3D streamline.</p>
                     </div>
@@ -454,11 +478,11 @@
                 <div class="flex items-center gap-1 bg-slate-900/90 p-1 rounded-xl border border-white/10">
                     <button id="modeBaseballBtn" type="button" class="mode-btn px-3 py-1.5 rounded-lg text-xs font-bold bg-pitchcyan text-black shadow-sm transition flex items-center gap-1.5">
                         <i data-lucide="target" class="w-3.5 h-3.5"></i>
-                        <span>⚾ Baseball Pitch</span>
+                        <span>ABS Pitch Tracking</span>
                     </button>
                     <button id="modeNormalBtn" type="button" class="mode-btn px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:text-white transition flex items-center gap-1.5">
                         <i data-lucide="play" class="w-3.5 h-3.5"></i>
-                        <span>🎯 Normal / Any Video</span>
+                        <span>Full-Frame Motion</span>
                     </button>
                 </div>
             </div>
@@ -516,19 +540,26 @@
                 </div>
 
                 <!-- Initial Empty State / Dropzone -->
-                <div id="emptyState" class="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/95 z-10 p-6 text-center">
-                    <div class="w-16 h-16 rounded-2xl bg-slate-900 border border-white/10 flex items-center justify-center mb-4 text-pitchcyan shadow-xl shadow-pitchcyan/10">
-                        <i data-lucide="film" class="w-8 h-8"></i>
+                <div id="emptyState" class="absolute inset-0 flex flex-col items-center justify-center bg-pitchblack/95 backdrop-blur-sm z-10 p-6 text-center select-none">
+                    <div class="w-16 h-16 rounded-2xl bg-pitchcard border border-white/10 flex items-center justify-center mb-4 text-pitchcyan shadow-2xl relative">
+                        <i data-lucide="crosshair" class="w-8 h-8 text-pitchcyan"></i>
+                        <span class="absolute -top-1 -right-1 flex h-3 w-3">
+                            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-pitchcyan opacity-75"></span>
+                            <span class="relative inline-flex rounded-full h-3 w-3 bg-pitchcyan"></span>
+                        </span>
                     </div>
-                    <h3 class="text-base font-bold text-white">No Pitch Loaded</h3>
-                    <p class="text-xs text-slate-400 mt-1 max-w-sm">Drag & drop your baseball or softball pitch video here, or click below to get started.</p>
-                    <p class="text-[11px] text-cyan-400/90 mt-2 font-medium max-w-md bg-cyan-950/40 border border-cyan-500/20 px-3 py-1.5 rounded-lg"><span class="font-bold">Recommended Setup:</span> Mount phone directly behind catcher/plate at chest height facing pitcher (or broadcast centerfield).</p>
+                    <h3 class="text-base font-bold text-white tracking-tight">Optical Tracking Standby</h3>
+                    <p class="text-xs text-slate-400 mt-1 max-w-sm leading-relaxed">Load a pitch video or test clip to initialize optical flow trajectory and ABS strike zone analysis.</p>
+                    <div class="text-[11px] text-slate-300 mt-3 font-medium max-w-md bg-pitchcard border border-white/10 px-3.5 py-2 rounded-xl flex items-center gap-2">
+                        <i data-lucide="camera" class="w-4 h-4 text-pitchcyan shrink-0"></i>
+                        <span class="text-left text-[11px] text-slate-400"><strong class="text-slate-200">Recommended Setup:</strong> Behind plate at chest height facing pitcher, or centerfield broadcast camera.</span>
+                    </div>
                     <div class="flex items-center gap-3 mt-5">
-                        <button onclick="document.getElementById('videoUploadInput').click()" class="px-4 py-2 rounded-xl bg-pitchcyan hover:bg-cyan-300 text-black font-bold text-xs transition flex items-center gap-2 shadow-lg shadow-pitchcyan/20">
-                            <i data-lucide="upload" class="w-4 h-4"></i> Choose File
+                        <button onclick="document.getElementById('videoUploadInput').click()" class="px-4 py-2 rounded-xl bg-pitchcyan hover:bg-cyan-300 text-black font-bold text-xs transition flex items-center gap-2 shadow-lg shadow-pitchcyan/10 btn-tactile">
+                            <i data-lucide="upload" class="w-4 h-4"></i> Upload Video
                         </button>
-                        <button onclick="document.getElementById('samplePitchBtn').click()" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs border border-white/10 transition flex items-center gap-2">
-                            <i data-lucide="play" class="w-4 h-4 text-pitchcyan"></i> Try Demo Pitch
+                        <button onclick="document.getElementById('samplePitchBtn').click()" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs border border-white/10 transition flex items-center gap-2 btn-tactile">
+                            <i data-lucide="play" class="w-4 h-4 text-pitchcyan"></i> Load Reference Pitch
                         </button>
                     </div>
                 </div>
@@ -804,12 +835,12 @@
                     <div>
                         <label class="text-[11px] font-semibold text-slate-400 block mb-1">Mound-to-Plate Distance</label>
                         <select id="distancePresetSelect" class="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-pitchcyan transition">
-                            <option value="60.5" selected>⚾ MLB / Pro Baseball (60.5 ft / 18.4 m)</option>
-                            <option value="58.0">🏏 Cricket Pitch (58.0 ft / 17.7 m)</option>
-                            <option value="46.0">⚾ Little League / Youth (46.0 ft / 14.0 m)</option>
-                            <option value="43.0">🥎 Softball Fastpitch (43.0 ft / 13.1 m)</option>
-                            <option value="35.0">🌳 Casual Park / Backyard (35.0 ft / 10.7 m)</option>
-                            <option value="custom">🎯 Custom Distance...</option>
+                            <option value="60.5" selected>MLB Regulation Pitch — 60.5 ft (18.4 m)</option>
+                            <option value="58.0">Cricket Wicket Distance — 58.0 ft (17.7 m)</option>
+                            <option value="46.0">Little League Mound — 46.0 ft (14.0 m)</option>
+                            <option value="43.0">Softball Fastpitch — 43.0 ft (13.1 m)</option>
+                            <option value="35.0">Short Mound / Backyard — 35.0 ft (10.7 m)</option>
+                            <option value="custom">Custom Calibrated Distance...</option>
                         </select>
                     </div>
 
@@ -1029,9 +1060,9 @@
                     <div>
                         <label class="text-[11px] font-semibold text-slate-400 block mb-1">Ball Type</label>
                         <select id="ballTypeSelect" class="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-pitchcyan transition">
-                            <option value="auto" selected>⚡ Auto Detect</option>
-                            <option value="baseball">⚾ Regulation Baseball (White Leather)</option>
-                            <option value="tennis_cricket">🎾 Tennis / Cricket Ball (Neon Green/Yellow)</option>
+                            <option value="auto" selected>Auto-Detect Ball Type</option>
+                            <option value="baseball">Regulation Baseball (White Leather)</option>
+                            <option value="tennis_cricket">Tennis / High-Vis Yellow Ball</option>
                         </select>
                     </div>
 
