@@ -12,6 +12,8 @@ from typing import Optional, Tuple
 # Official BallDataLab / BaseballCV hosting endpoint for ball_trackingv4 (YOLOv11)
 DEFAULT_WEIGHTS_URL = "https://data.balldatalab.com/index.php/s/YkGBwbFtsf34ky3/download/ball_tracking_v4-YOLOv11.pt"
 MODEL_FILENAME = "ball_trackingv4.pt"
+SMALL_MODEL_FILENAME = "ball_small_yolo11s.pt"
+DEFAULT_SMALL_WEIGHTS_URL = os.environ.get("VELOPATH_SMALL_WEIGHTS_URL", "")
 
 
 def get_project_root() -> str:
@@ -103,10 +105,54 @@ def reassemble_from_parts(target_path: str) -> Optional[str]:
     return None
 
 
-def resolve_small_model_path() -> Optional[str]:
-    """The small fast YOLO11s ball model (trained in Colab, see training/), if it has been added to models/."""
-    path = os.path.join(get_project_root(), "models", "ball_small_yolo11s.pt")
-    return path if os.path.exists(path) else None
+def reassemble_small_from_parts(target_path: str) -> Optional[str]:
+    """
+    Checks if repository split parts exist (models/weights_parts/ball_small_yolo11s.pt.part*)
+    and combines them into a complete model file in milliseconds without network access.
+    """
+    root = get_project_root()
+    part1 = os.path.join(root, "models", "weights_parts", f"{SMALL_MODEL_FILENAME}.part1")
+    part2 = os.path.join(root, "models", "weights_parts", f"{SMALL_MODEL_FILENAME}.part2")
+
+    if os.path.exists(part1) and os.path.exists(part2):
+        print(f"[VeloPath AI] Reassembling small fast model from repository packages...")
+        os.makedirs(os.path.dirname(target_path), exist_ok=True)
+        temp_path = target_path + ".assembling"
+        with open(temp_path, "wb") as f_out:
+            with open(part1, "rb") as f1:
+                f_out.write(f1.read())
+            with open(part2, "rb") as f2:
+                f_out.write(f2.read())
+        if os.path.exists(target_path):
+            os.remove(target_path)
+        os.rename(temp_path, target_path)
+        print(f"[VeloPath AI] Successfully assembled {os.path.basename(target_path)} ({os.path.getsize(target_path)/1024/1024:.1f} MB)!\n")
+        return target_path
+    return None
+
+
+def resolve_small_model_path(auto_download: bool = True) -> Optional[str]:
+    """
+    Finds the small fast YOLO11s ball model, auto-reassembles from repository split parts,
+    or downloads from remote URL if configured.
+    """
+    target_path = os.path.join(get_project_root(), "models", SMALL_MODEL_FILENAME)
+    if os.path.exists(target_path):
+        return os.path.abspath(target_path)
+
+    # Reassemble from repo parts (instant, zero internet needed)
+    assembled = reassemble_small_from_parts(target_path)
+    if assembled and os.path.exists(assembled):
+        return os.path.abspath(assembled)
+
+    # Optional remote download fallback
+    if auto_download and DEFAULT_SMALL_WEIGHTS_URL:
+        try:
+            return download_model_weights(target_path, url=DEFAULT_SMALL_WEIGHTS_URL)
+        except Exception as e:
+            print(f"[VeloPath AI] Note: Could not auto-download {SMALL_MODEL_FILENAME}: {e}")
+
+    return None
 
 
 def resolve_model_path(auto_download: bool = True) -> Optional[str]:

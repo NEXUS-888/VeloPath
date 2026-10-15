@@ -13,7 +13,7 @@ fi
 
 if [ ! -d "venv" ]; then
     echo "[*] Creating virtual environment (venv)..."
-    python3 -m venv venv
+    python3 -m venv --system-site-packages venv || python3 -m venv venv
 fi
 
 source venv/bin/activate

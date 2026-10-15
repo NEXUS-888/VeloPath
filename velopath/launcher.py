@@ -79,6 +79,10 @@ def check_requirements():
             import uvicorn
             import cv2
             import ultralytics
+            import scipy
+            import imageio
+            import imageio_ffmpeg
+            import multipart
         except ImportError:
             print("[VeloPath AI] Installing dependencies from requirements.txt...")
             subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", req_file])
@@ -158,11 +162,14 @@ def main():
     check_requirements()
 
     # 4. Model Weights Resolution
-    from velopath.model_manager import resolve_model_path, get_acceleration_device
+    from velopath.model_manager import resolve_model_path, resolve_small_model_path, get_acceleration_device
     model_path = resolve_model_path(auto_download=True)
+    small_model_path = resolve_small_model_path(auto_download=True)
     device_id, device_name = get_acceleration_device()
 
-    print(f"[*] Model Weights:       {model_path}")
+    print(f"[*] Primary Model:       {model_path}")
+    if small_model_path:
+        print(f"[*] Fast Scan Model:     {small_model_path}")
     print(f"[*] Compute Device:      {device_name}")
     # friend's GPU worker: connect_remote prints whether it is used; the tracker connects again on first upload
     from velopath.remote_gpu import connect_remote
