@@ -893,7 +893,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const stopProgress = startProgress(jobId);
 
         const formData = new FormData();
-        formData.append('file', file);
+        const ext = (file && file.name) ? file.name.split('.').pop().toLowerCase().replace(/[^a-z0-9]/g, '') : 'mp4';
+        const safeName = `pitch_upload.${ext || 'mp4'}`;
+        formData.append('file', file, safeName);
         formData.append('distance_ft', getSelectedDistance());
         formData.append('pitch_number', 1);
         formData.append('graphic_style', activeGraphicStyle);
@@ -915,8 +917,11 @@ document.addEventListener('DOMContentLoaded', () => {
             });
 
             if (!response.ok) {
-                const err = await response.json();
-                throw new Error(err.detail || 'Video processing failed');
+                const err = await response.json().catch(() => ({}));
+                const msg = typeof err.detail === 'string'
+                    ? err.detail
+                    : (Array.isArray(err.detail) ? err.detail.map(d => d.msg || JSON.stringify(d)).join(', ') : 'Video processing failed');
+                throw new Error(msg);
             }
 
             const data = await response.json();

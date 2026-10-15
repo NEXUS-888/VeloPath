@@ -16,11 +16,52 @@ from fastapi import FastAPI, File, UploadFile, Form, HTTPException, Request, Res
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, StreamingResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
+import starlette.formparsers as _fp
+import urllib.parse
 
 from velopath.pipeline import process_pitch_video, rerender_pitch
 from velopath.scorebook import Game, PITCHES, PLAYS
 
+# Configure Starlette form parser to handle browser quirks (unicode filenames, RFC 5987, and videos > 1MB)
+_orig_parse_options = _fp.parse_options_header
+_orig_multipart_init = _fp.MultiPartParser.__init__
+
+
+def _robust_parse_options_header(value):
+    val_str = value.decode("utf-8", errors="replace") if isinstance(value, bytes) else (value or "")
+    try:
+        ctype, options = _orig_parse_options(val_str)
+    except UnicodeEncodeError:
+        safe_val = val_str.encode("ascii", errors="replace").decode("latin-1")
+        ctype, options = _orig_parse_options(safe_val)
+
+    if b"filename" not in options:
+        m = re.search(r"filename\*\s*=\s*(?:UTF-8''|utf-8'')?([^;\r\n]+)", val_str)
+        if m:
+            raw_fn = urllib.parse.unquote(m.group(1).strip("\"'"))
+            options[b"filename"] = raw_fn.encode("ascii", errors="replace")
+        elif options.get(b"name") == b"file":
+            options[b"filename"] = b"upload.mp4"
+
+    return ctype, options
+
+
+def _robust_multipart_init(self, *args, **kwargs):
+    kwargs["max_part_size"] = max(kwargs.get("max_part_size", 0), 500 * 1024 * 1024)
+    _orig_multipart_init(self, *args, **kwargs)
+
+
+_fp.parse_options_header = _robust_parse_options_header
+_fp.MultiPartParser.__init__ = _robust_multipart_init
+
 app = FastAPI(title="VeloPath AI", version="1.0.0")
+
+
+@app.exception_handler(HTTPException)
+async def http_exception_logging_handler(request: Request, exc: HTTPException):
+    print(f"[VeloPath Server] HTTP {exc.status_code} on {request.method} {request.url.path}: {exc.detail}")
+    return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+
 
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -149,7 +190,8 @@ def process_uploaded_video(
         raise HTTPException(status_code=422, detail="Pitch window needs 0 <= start_s < end_s (seconds).")
     started = time.monotonic()
     file_id = str(uuid.uuid4())[:8]
-    ext = os.path.splitext(file.filename)[1] or ".mp4"
+    raw_filename = file.filename or "pitch.mp4"
+    ext = os.path.splitext(raw_filename)[1].lower() or ".mp4"
     saved_input = os.path.join(UPLOADS_DIR, f"input_{file_id}{ext}")
     output_filename = f"velopath_{file_id}.mp4"
     saved_output = os.path.join(OUTPUTS_DIR, output_filename)

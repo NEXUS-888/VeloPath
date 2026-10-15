@@ -251,3 +251,27 @@ def test_export_csv(client, games_dir):
     assert reader[2][8] == ""
     assert reader[2][9] == ""
 
+
+def test_process_handles_quirky_multipart_filenames(tmp_path, monkeypatch):
+    """Verifies that unicode filenames, missing filenames, and files > 1MB do not trigger Starlette 400."""
+    import velopath.server as server
+    from fastapi.testclient import TestClient
+
+    monkeypatch.setattr(server, "process_pitch_video", lambda **kw: {"pitch_detected": False})
+    monkeypatch.setattr(server, "UPLOADS_DIR", str(tmp_path))
+    client = TestClient(server.app)
+
+    # 1. Unicode emoji filename
+    res = client.post("/api/process", files={"file": ("pitch_⚾.mp4", b"data", "video/mp4")})
+    assert res.status_code == 200
+
+    # 2. File larger than Starlette's default 1024KB part limit
+    large_content = b"x" * (2 * 1024 * 1024)  # 2MB
+    res = client.post("/api/process", files={"file": ("large_pitch.mp4", large_content, "video/mp4")})
+    assert res.status_code == 200
+
+    # 3. Empty filename
+    res = client.post("/api/process", files={"file": ("", b"data", "video/mp4")})
+    assert res.status_code == 200
+
+
