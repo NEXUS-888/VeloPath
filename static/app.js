@@ -98,8 +98,16 @@ document.addEventListener('DOMContentLoaded', () => {
     // View Switching & Landing Elements
     const landingView = document.getElementById('landingView');
     const studioView = document.getElementById('studioView');
+    const scorebookView = document.getElementById('scorebookView');
     const viewOverviewBtn = document.getElementById('viewOverviewBtn');
     const viewStudioBtn = document.getElementById('viewStudioBtn');
+    const viewScoreBtn = document.getElementById('viewScoreBtn');
+    const studioToScorebookBtn = document.getElementById('studioToScorebookBtn');
+    const studioMatchTitle = document.getElementById('studioMatchTitle');
+    const studioMatchInning = document.getElementById('studioMatchInning');
+    const studioMatchCount = document.getElementById('studioMatchCount');
+    const studioMatchOuts = document.getElementById('studioMatchOuts');
+    const studioMatchScore = document.getElementById('studioMatchScore');
     const landingDemoBtn = document.getElementById('landingDemoBtn');
     const landingUploadBtn = document.getElementById('landingUploadBtn');
     const landingExploreStudioBtn = document.getElementById('landingExploreStudioBtn');
@@ -172,35 +180,43 @@ document.addEventListener('DOMContentLoaded', () => {
     if (modeBaseballBtn) modeBaseballBtn.addEventListener('click', () => setTrackingMode('baseball'));
     if (modeNormalBtn) modeNormalBtn.addEventListener('click', () => setTrackingMode('normal'));
 
-    // 2b. View Switching (Landing Overview vs Pro Studio)
+    // 2b. View Switching (Landing Overview vs Pro Studio vs Scorebook)
+    const BTN_ACTIVE_CLS = 'view-btn px-2.5 py-1 rounded text-xs font-bold bg-pitchcyan text-black shadow-sm transition flex items-center gap-1.5';
+    const BTN_INACTIVE_CLS = 'view-btn px-2.5 py-1 rounded text-xs font-semibold text-slate-400 hover:text-white transition flex items-center gap-1.5';
+
     function switchView(viewName) {
         if (viewName === 'studio') {
             if (landingView) landingView.classList.add('hidden');
+            if (scorebookView) scorebookView.classList.add('hidden');
             if (studioView) studioView.classList.remove('hidden');
-            if (viewOverviewBtn) {
-                viewOverviewBtn.className = 'view-btn px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:text-white transition flex items-center gap-1.5';
-            }
-            if (viewStudioBtn) {
-                viewStudioBtn.className = 'view-btn px-3 py-1.5 rounded-lg text-xs font-bold bg-pitchcyan text-black shadow-sm transition flex items-center gap-1.5';
-            }
+            if (viewOverviewBtn) viewOverviewBtn.className = BTN_INACTIVE_CLS;
+            if (viewStudioBtn) viewStudioBtn.className = BTN_ACTIVE_CLS;
+            if (viewScoreBtn) viewScoreBtn.className = BTN_INACTIVE_CLS;
             setTimeout(() => {
                 syncInteractiveBox();
             }, 60);
+        } else if (viewName === 'scorebook') {
+            if (landingView) landingView.classList.add('hidden');
+            if (studioView) studioView.classList.add('hidden');
+            if (scorebookView) scorebookView.classList.remove('hidden');
+            if (viewOverviewBtn) viewOverviewBtn.className = BTN_INACTIVE_CLS;
+            if (viewStudioBtn) viewStudioBtn.className = BTN_INACTIVE_CLS;
+            if (viewScoreBtn) viewScoreBtn.className = BTN_ACTIVE_CLS;
         } else {
             if (studioView) studioView.classList.add('hidden');
+            if (scorebookView) scorebookView.classList.add('hidden');
             if (landingView) landingView.classList.remove('hidden');
-            if (viewOverviewBtn) {
-                viewOverviewBtn.className = 'view-btn px-3 py-1.5 rounded-lg text-xs font-bold bg-pitchcyan text-black shadow-sm transition flex items-center gap-1.5';
-            }
-            if (viewStudioBtn) {
-                viewStudioBtn.className = 'view-btn px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:text-white transition flex items-center gap-1.5';
-            }
+            if (viewOverviewBtn) viewOverviewBtn.className = BTN_ACTIVE_CLS;
+            if (viewStudioBtn) viewStudioBtn.className = BTN_INACTIVE_CLS;
+            if (viewScoreBtn) viewScoreBtn.className = BTN_INACTIVE_CLS;
         }
         if (window.lucide) window.lucide.createIcons();
     }
 
     if (viewOverviewBtn) viewOverviewBtn.addEventListener('click', () => switchView('overview'));
     if (viewStudioBtn) viewStudioBtn.addEventListener('click', () => switchView('studio'));
+    if (viewScoreBtn) viewScoreBtn.addEventListener('click', () => switchView('scorebook'));
+    if (studioToScorebookBtn) studioToScorebookBtn.addEventListener('click', () => switchView('scorebook'));
     if (landingExploreStudioBtn) landingExploreStudioBtn.addEventListener('click', () => switchView('studio'));
 
     // Teaser Pitch Presets & Simulation
@@ -1351,6 +1367,23 @@ document.addEventListener('DOMContentLoaded', () => {
     const scoreLog = document.getElementById('scoreLog');
     const scoreExport = document.getElementById('scoreExport');
     const scoreError = document.getElementById('scoreError');
+    const scoreBallByBallFeed = document.getElementById('scoreBallByBallFeed');
+
+    const pitcherNameInput = document.getElementById('pitcherNameInput');
+    const pitcherPitchesVal = document.getElementById('pitcherPitchesVal');
+    const pitcherStrikesVal = document.getElementById('pitcherStrikesVal');
+    const pitcherStrikeRateVal = document.getElementById('pitcherStrikeRateVal');
+    const pitcherKsVal = document.getElementById('pitcherKsVal');
+    const pitcherBBsVal = document.getElementById('pitcherBBsVal');
+    const pitcherRAsVal = document.getElementById('pitcherRAsVal');
+
+    const batterNameInput = document.getElementById('batterNameInput');
+    const batterABsVal = document.getElementById('batterABsVal');
+    const batterHitsVal = document.getElementById('batterHitsVal');
+    const batterAvgVal = document.getElementById('batterAvgVal');
+    const batterRunsVal = document.getElementById('batterRunsVal');
+    const batterKsVal = document.getElementById('batterKsVal');
+    const batterBBsVal = document.getElementById('batterBBsVal');
 
     let scoreLastAddedVideoId = null;
     let scorePendingPitch = null;
@@ -1441,6 +1474,32 @@ document.addEventListener('DOMContentLoaded', () => {
             if (scoreLog) {
                 while (scoreLog.firstChild) scoreLog.removeChild(scoreLog.firstChild);
             }
+            if (scoreBallByBallFeed) {
+                while (scoreBallByBallFeed.firstChild) scoreBallByBallFeed.removeChild(scoreBallByBallFeed.firstChild);
+                const emptyCard = document.createElement('div');
+                emptyCard.className = 'p-3 rounded-lg bg-slate-900/60 border border-white/5 text-center text-xs text-slate-400';
+                emptyCard.textContent = 'Match initialized. Pitch decisions and plate outcomes will stream live ball-by-ball.';
+                scoreBallByBallFeed.appendChild(emptyCard);
+            }
+            if (pitcherPitchesVal) pitcherPitchesVal.textContent = '0';
+            if (pitcherStrikesVal) pitcherStrikesVal.textContent = '0 / 0';
+            if (pitcherStrikeRateVal) pitcherStrikeRateVal.textContent = '0.0%';
+            if (pitcherKsVal) pitcherKsVal.textContent = '0';
+            if (pitcherBBsVal) pitcherBBsVal.textContent = '0';
+            if (pitcherRAsVal) pitcherRAsVal.textContent = '0';
+
+            if (batterABsVal) batterABsVal.textContent = '0';
+            if (batterHitsVal) batterHitsVal.textContent = '0';
+            if (batterAvgVal) batterAvgVal.textContent = '.000';
+            if (batterRunsVal) batterRunsVal.textContent = '0';
+            if (batterKsVal) batterKsVal.textContent = '0';
+            if (batterBBsVal) batterBBsVal.textContent = '0';
+
+            if (studioMatchTitle) studioMatchTitle.textContent = 'Away vs Home';
+            if (studioMatchInning) studioMatchInning.textContent = '▲ 1';
+            if (studioMatchCount) studioMatchCount.textContent = '0-0';
+            if (studioMatchOuts) studioMatchOuts.textContent = '0 Outs';
+            if (studioMatchScore) studioMatchScore.textContent = '0 - 0';
             return;
         }
 
@@ -1687,6 +1746,265 @@ document.addEventListener('DOMContentLoaded', () => {
                 scoreLog.appendChild(item);
             });
         }
+
+        // 10. Live Player Stats & Ball-by-Ball Feed
+        scoreComputePlayerStats(state);
+        scoreRenderBallByBall(state);
+
+        // 11. Synchronize Studio Dugout Summary Card
+        if (studioMatchTitle) {
+            studioMatchTitle.textContent = `${state.away || 'Away'} vs ${state.home || 'Home'}`;
+        }
+        if (studioMatchInning) {
+            studioMatchInning.textContent = `${state.top ? '▲' : '▼'} ${state.inning || 1}`;
+        }
+        if (studioMatchCount) {
+            studioMatchCount.textContent = `${state.balls || 0}-${state.strikes || 0}`;
+        }
+        if (studioMatchOuts) {
+            studioMatchOuts.textContent = `${state.outs || 0} Outs`;
+        }
+        if (studioMatchScore) {
+            const awayR = state.runs ? state.runs[0] : 0;
+            const homeR = state.runs ? state.runs[1] : 0;
+            studioMatchScore.textContent = `${awayR} - ${homeR}`;
+        }
+    }
+
+    function scoreComputePlayerStats(state) {
+        let pitches = 0;
+        let strikes = 0;
+        let balls = 0;
+        let strikeouts = 0;
+        let walks = 0;
+        let runsAllowed = 0;
+
+        let abs = 0;
+        let hits = 0;
+        let batterRuns = 0;
+        let batterKs = 0;
+        let batterBBs = 0;
+
+        const log = (state && state.log) || [];
+        for (let i = 0; i < log.length; i++) {
+            const ev = log[i];
+            const k = ev.kind;
+            if (k === 'ball') {
+                pitches++;
+                balls++;
+                if (ev.balls === 3) {
+                    walks++;
+                    batterBBs++;
+                }
+            } else if (k === 'strike') {
+                pitches++;
+                strikes++;
+                if (ev.strikes === 2) {
+                    strikeouts++;
+                    abs++;
+                    batterKs++;
+                }
+            } else if (k === 'foul') {
+                pitches++;
+                strikes++;
+            } else if (k === 'hbp') {
+                pitches++;
+                walks++;
+                batterBBs++;
+            } else if (k === 'in_play') {
+                pitches++;
+                strikes++;
+            } else if (k === 'single' || k === 'double' || k === 'triple' || k === 'home_run') {
+                abs++;
+                hits++;
+                if (k === 'home_run') {
+                    batterRuns++;
+                }
+            } else if (k === 'out' || k === 'double_play' || k === 'error') {
+                abs++;
+            }
+        }
+
+        if (state && state.runs) {
+            runsAllowed = state.top ? (state.runs[0] || 0) : (state.runs[1] || 0);
+        }
+
+        const strikePct = pitches > 0 ? ((strikes / pitches) * 100).toFixed(1) + '%' : '0.0%';
+        const avg = abs > 0 ? (hits / abs).toFixed(3).replace(/^0/, '') : '.000';
+
+        if (pitcherPitchesVal) pitcherPitchesVal.textContent = String(pitches);
+        if (pitcherStrikesVal) pitcherStrikesVal.textContent = `${strikes} / ${balls}`;
+        if (pitcherStrikeRateVal) pitcherStrikeRateVal.textContent = strikePct;
+        if (pitcherKsVal) pitcherKsVal.textContent = String(strikeouts);
+        if (pitcherBBsVal) pitcherBBsVal.textContent = String(walks);
+        if (pitcherRAsVal) pitcherRAsVal.textContent = String(runsAllowed);
+
+        if (batterABsVal) batterABsVal.textContent = String(abs);
+        if (batterHitsVal) batterHitsVal.textContent = String(hits);
+        if (batterAvgVal) batterAvgVal.textContent = avg;
+        if (batterRunsVal) batterRunsVal.textContent = String(batterRuns);
+        if (batterKsVal) batterKsVal.textContent = String(batterKs);
+        if (batterBBsVal) batterBBsVal.textContent = String(batterBBs);
+    }
+
+    function scoreRenderBallByBall(state) {
+        if (!scoreBallByBallFeed) return;
+        while (scoreBallByBallFeed.firstChild) {
+            scoreBallByBallFeed.removeChild(scoreBallByBallFeed.firstChild);
+        }
+
+        const log = (state && state.log) || [];
+        if (log.length === 0) {
+            const emptyCard = document.createElement('div');
+            emptyCard.className = 'p-3 rounded-lg bg-slate-900/60 border border-white/5 text-center text-xs text-slate-400';
+            emptyCard.textContent = 'Match initialized. Pitch decisions and plate outcomes will stream live ball-by-ball.';
+            scoreBallByBallFeed.appendChild(emptyCard);
+            return;
+        }
+
+        const pName = (pitcherNameInput && pitcherNameInput.value.trim()) || 'Pitcher';
+        const bName = (batterNameInput && batterNameInput.value.trim()) || 'Batter';
+
+        const recentEvents = log.slice().reverse();
+        recentEvents.forEach((ev, idx) => {
+            const seqNum = log.length - idx;
+            const card = document.createElement('div');
+            card.className = 'p-3 rounded-xl bg-slate-900/80 border border-white/10 hover:border-pitchcyan/30 transition flex flex-col gap-1.5 shadow-sm';
+
+            const headerRow = document.createElement('div');
+            headerRow.className = 'flex items-center justify-between text-[11px]';
+
+            const leftInfo = document.createElement('div');
+            leftInfo.className = 'flex items-center gap-2';
+
+            const seqBadge = document.createElement('span');
+            seqBadge.className = 'px-1.5 py-0.5 rounded bg-white/10 text-slate-300 font-mono font-bold text-[10px]';
+            seqBadge.textContent = `#${seqNum}`;
+            leftInfo.appendChild(seqBadge);
+
+            const inningText = document.createElement('span');
+            inningText.className = 'font-mono text-pitchcyan font-bold';
+            inningText.textContent = `${ev.top ? '▲' : '▼'} Inn ${ev.inning}`;
+            leftInfo.appendChild(inningText);
+
+            const dot = document.createElement('span');
+            dot.className = 'text-white/20';
+            dot.textContent = '•';
+            leftInfo.appendChild(dot);
+
+            const countText = document.createElement('span');
+            countText.className = 'font-mono text-slate-300';
+            countText.textContent = `Count ${ev.balls}-${ev.strikes}`;
+            leftInfo.appendChild(countText);
+
+            headerRow.appendChild(leftInfo);
+
+            const badge = document.createElement('span');
+            const k = ev.kind;
+            if (k === 'strike') {
+                if (ev.strikes === 2) {
+                    badge.className = 'px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-400 border border-rose-500/40 text-[10px] font-mono font-bold';
+                    badge.textContent = 'STRIKEOUT (K)';
+                } else {
+                    badge.className = 'px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-400 border border-rose-500/30 text-[10px] font-mono font-bold';
+                    badge.textContent = 'STRIKE';
+                }
+            } else if (k === 'ball') {
+                if (ev.balls === 3) {
+                    badge.className = 'px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[10px] font-mono font-bold';
+                    badge.textContent = 'WALK (BB)';
+                } else {
+                    badge.className = 'px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-mono font-bold';
+                    badge.textContent = 'BALL';
+                }
+            } else if (k === 'foul') {
+                badge.className = 'px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] font-mono font-bold';
+                badge.textContent = 'FOUL';
+            } else if (k === 'hbp') {
+                badge.className = 'px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-[10px] font-mono font-bold';
+                badge.textContent = 'HIT BY PITCH';
+            } else if (k === 'in_play') {
+                badge.className = 'px-2 py-0.5 rounded-full bg-pitchcyan/20 text-pitchcyan border border-pitchcyan/30 text-[10px] font-mono font-bold';
+                badge.textContent = 'IN PLAY';
+            } else if (k === 'single') {
+                badge.className = 'px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-mono font-bold';
+                badge.textContent = 'SINGLE (1B)';
+            } else if (k === 'double') {
+                badge.className = 'px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-mono font-bold';
+                badge.textContent = 'DOUBLE (2B)';
+            } else if (k === 'triple') {
+                badge.className = 'px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-mono font-bold';
+                badge.textContent = 'TRIPLE (3B)';
+            } else if (k === 'home_run') {
+                badge.className = 'px-2 py-0.5 rounded-full bg-purple-500/30 text-purple-300 border border-purple-500/50 text-[10px] font-mono font-black animate-pulse';
+                badge.textContent = 'HOME RUN (HR)';
+            } else if (k === 'out') {
+                badge.className = 'px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30 text-[10px] font-mono font-bold';
+                badge.textContent = 'OUT';
+            } else if (k === 'error') {
+                badge.className = 'px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] font-mono font-bold';
+                badge.textContent = 'ERROR (E)';
+            } else if (k === 'sac_fly') {
+                badge.className = 'px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-[10px] font-mono font-bold';
+                badge.textContent = 'SAC FLY';
+            } else if (k === 'double_play') {
+                badge.className = 'px-2 py-0.5 rounded-full bg-rose-500/30 text-rose-300 border border-rose-500/50 text-[10px] font-mono font-black';
+                badge.textContent = 'DOUBLE PLAY';
+            } else {
+                badge.className = 'px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 text-[10px] font-mono';
+                badge.textContent = k.toUpperCase();
+            }
+            headerRow.appendChild(badge);
+            card.appendChild(headerRow);
+
+            const narrativeRow = document.createElement('div');
+            narrativeRow.className = 'text-xs text-slate-200 flex items-center justify-between';
+
+            const descSpan = document.createElement('span');
+            const veloText = ev.mph !== undefined && ev.mph !== null ? ` [${ev.mph} mph]` : '';
+            let narrative = `${pName} to ${bName}: ${k.replace('_', ' ').toUpperCase()}${veloText}`;
+            if (k === 'strike') {
+                narrative = `${pName} delivers strike to ${bName}${veloText}`;
+            } else if (k === 'ball') {
+                narrative = `${pName} misses outside to ${bName}${veloText}`;
+            } else if (k === 'foul') {
+                narrative = `${bName} fouls it off into the stands${veloText}`;
+            } else if (k === 'in_play') {
+                narrative = `${bName} puts ball in play against ${pName}${veloText}`;
+            } else if (k === 'single') {
+                narrative = `${bName} lines a single into shallow field`;
+            } else if (k === 'double') {
+                narrative = `${bName} drills an extra-base double into the gap`;
+            } else if (k === 'triple') {
+                narrative = `${bName} races to 3rd for a standup triple!`;
+            } else if (k === 'home_run') {
+                narrative = `DEEP FLY TO THE STANDS! ${bName} clears the fence for a HOME RUN!`;
+            } else if (k === 'out') {
+                narrative = `${bName} grounds/flies out to retire the play`;
+            } else if (k === 'double_play') {
+                narrative = `Twin killing! Defense turns a 2-out double play`;
+            } else if (k === 'error') {
+                narrative = `Fielding miscue allows ${bName} to reach safely on error`;
+            } else if (k === 'sac_fly') {
+                narrative = `Sacrifice fly scores runner from 3rd base`;
+            }
+            descSpan.textContent = narrative;
+            narrativeRow.appendChild(descSpan);
+            card.appendChild(narrativeRow);
+
+            scoreBallByBallFeed.appendChild(card);
+        });
+    }
+
+    if (pitcherNameInput) {
+        pitcherNameInput.addEventListener('input', () => {
+            if (scoreCurrentState) scoreRenderBallByBall(scoreCurrentState);
+        });
+    }
+    if (batterNameInput) {
+        batterNameInput.addEventListener('input', () => {
+            if (scoreCurrentState) scoreRenderBallByBall(scoreCurrentState);
+        });
     }
 
     // Phase C: Offer pitch result in #scoreConfirm
