@@ -1051,4 +1051,406 @@ document.addEventListener('DOMContentLoaded', () => {
     helpModal.addEventListener('click', (e) => {
         if (e.target === helpModal) helpModal.classList.add('hidden');
     });
+
+    // 21. Scorekeeping Controller (Phase B)
+    let scoreCurrentGameId = null;
+    let scoreCurrentState = null;
+
+    // DOM Elements
+    const scoreCard = document.getElementById('scoreCard');
+    const scoreNewBtn = document.getElementById('scoreNewBtn');
+    const scoreSetup = document.getElementById('scoreSetup');
+    const scoreAway = document.getElementById('scoreAway');
+    const scoreHome = document.getElementById('scoreHome');
+    const scoreInnings = document.getElementById('scoreInnings');
+    const scoreStartBtn = document.getElementById('scoreStartBtn');
+    const scoreDisplay = document.getElementById('scoreDisplay');
+    const scoreInningLabel = document.getElementById('scoreInningLabel');
+    const scoreCount = document.getElementById('scoreCount');
+    const scoreOuts = document.getElementById('scoreOuts');
+    const scoreDiamond = document.getElementById('scoreDiamond');
+    const scoreLine = document.getElementById('scoreLine');
+    const scoreFinal = document.getElementById('scoreFinal');
+    const scorePitchButtons = document.querySelectorAll('[data-pitch]');
+    const scorePlayPicker = document.getElementById('scorePlayPicker');
+    const scorePlayButtons = document.querySelectorAll('[data-play]');
+    const scoreAdjustBtn = document.getElementById('scoreAdjustBtn');
+    const scoreUndoBtn = document.getElementById('scoreUndoBtn');
+    const scoreAdjust = document.getElementById('scoreAdjust');
+    const scoreBaseButtons = document.querySelectorAll('[data-base]');
+    const scoreRunsPlus = document.getElementById('scoreRunsPlus');
+    const scoreOutsPlus = document.getElementById('scoreOutsPlus');
+    const scoreAdjustApply = document.getElementById('scoreAdjustApply');
+    const scoreConfirm = document.getElementById('scoreConfirm');
+    const scoreError = document.getElementById('scoreError');
+
+    // Storage helpers
+    function scoreGetStoredId() {
+        try {
+            return localStorage.getItem('velopath.gameId');
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function scoreSetStoredId(id) {
+        try {
+            if (id) {
+                localStorage.setItem('velopath.gameId', id);
+            } else {
+                localStorage.removeItem('velopath.gameId');
+            }
+        } catch (e) {}
+    }
+
+    // Error display helpers
+    function scoreShowError(msg) {
+        if (!scoreError) return;
+        scoreError.textContent = msg;
+        scoreError.classList.remove('hidden');
+    }
+
+    function scoreHideError() {
+        if (!scoreError) return;
+        scoreError.textContent = '';
+        scoreError.classList.add('hidden');
+    }
+
+    // scoreCall helper
+    async function scoreCall(path, body) {
+        try {
+            const opts = {
+                method: body !== undefined ? 'POST' : 'GET',
+                headers: {}
+            };
+            if (body !== undefined) {
+                opts.headers['Content-Type'] = 'application/json';
+                opts.body = JSON.stringify(body);
+            }
+            const res = await fetch(path, opts);
+            if (!res.ok) {
+                let detail = res.statusText || 'Request failed';
+                try {
+                    const errData = await res.json();
+                    if (errData && errData.detail) detail = errData.detail;
+                } catch (e) {}
+                scoreShowError(detail);
+                if (res.status === 404 && path.startsWith('/api/games/')) {
+                    scoreSetStoredId(null);
+                    scoreCurrentGameId = null;
+                    scoreRender(null);
+                }
+                throw new Error(detail);
+            }
+            scoreHideError();
+            const data = await res.json();
+            if (data && data.id) {
+                scoreCurrentGameId = data.id;
+                scoreSetStoredId(data.id);
+            }
+            const st = data && data.state ? data.state : data;
+            scoreRender(st);
+            return st;
+        } catch (err) {
+            throw err;
+        }
+    }
+
+    // scoreRender(state)
+    function scoreRender(state) {
+        scoreCurrentState = state;
+        if (!state) {
+            if (scoreSetup) scoreSetup.classList.remove('hidden');
+            if (scoreDisplay) scoreDisplay.classList.add('hidden');
+            return;
+        }
+
+        if (scoreSetup) scoreSetup.classList.add('hidden');
+        if (scoreDisplay) scoreDisplay.classList.remove('hidden');
+
+        // 1. Inning label
+        if (scoreInningLabel) {
+            scoreInningLabel.textContent = (state.top ? '▲ ' : '▼ ') + state.inning;
+        }
+
+        // 2. Count
+        if (scoreCount) {
+            scoreCount.textContent = `${state.balls}-${state.strikes}`;
+        }
+
+        // 3. Outs (3 dots)
+        if (scoreOuts) {
+            while (scoreOuts.firstChild) {
+                scoreOuts.removeChild(scoreOuts.firstChild);
+            }
+            for (let i = 0; i < 3; i++) {
+                const dot = document.createElement('span');
+                const isOut = i < state.outs;
+                dot.className = isOut
+                    ? 'w-2.5 h-2.5 rounded-full bg-rose-500 shadow-sm shadow-rose-500/50'
+                    : 'w-2.5 h-2.5 rounded-full bg-slate-700';
+                scoreOuts.appendChild(dot);
+            }
+        }
+
+        // 4. Diamond SVG bases
+        const base0 = document.getElementById('scoreBase0');
+        const base1 = document.getElementById('scoreBase1');
+        const base2 = document.getElementById('scoreBase2');
+        if (base0) {
+            base0.setAttribute('fill', state.bases && state.bases[0] ? '#00f3ff' : 'rgba(255,255,255,0.2)');
+        }
+        if (base1) {
+            base1.setAttribute('fill', state.bases && state.bases[1] ? '#00f3ff' : 'rgba(255,255,255,0.2)');
+        }
+        if (base2) {
+            base2.setAttribute('fill', state.bases && state.bases[2] ? '#00f3ff' : 'rgba(255,255,255,0.2)');
+        }
+
+        // 5. Final game banner
+        if (scoreFinal) {
+            if (state.over) {
+                const winnerName = state.winner === 'away' ? state.away : (state.winner === 'home' ? state.home : 'Tied');
+                scoreFinal.textContent = `Final: ${winnerName} ${state.runs[0]} - ${state.runs[1]}`;
+                scoreFinal.classList.remove('hidden');
+            } else {
+                scoreFinal.textContent = '';
+                scoreFinal.classList.add('hidden');
+            }
+        }
+
+        // 6. Line Score table
+        if (scoreLine) {
+            while (scoreLine.firstChild) {
+                scoreLine.removeChild(scoreLine.firstChild);
+            }
+            const totalCols = Math.max(state.innings || 9, state.inning || 1);
+
+            // thead
+            const thead = document.createElement('thead');
+            const headRow = document.createElement('tr');
+            headRow.className = 'border-b border-white/10 text-[10px] text-slate-400 font-semibold';
+
+            const thTeam = document.createElement('th');
+            thTeam.className = 'py-1 px-2 text-left';
+            thTeam.textContent = 'Team';
+            headRow.appendChild(thTeam);
+
+            for (let c = 1; c <= totalCols; c++) {
+                const th = document.createElement('th');
+                th.className = 'py-1 px-1 font-mono';
+                th.textContent = String(c);
+                headRow.appendChild(th);
+            }
+            const thR = document.createElement('th');
+            thR.className = 'py-1 px-2 font-mono font-bold text-white';
+            thR.textContent = 'R';
+            headRow.appendChild(thR);
+            thead.appendChild(headRow);
+            scoreLine.appendChild(thead);
+
+            // tbody
+            const tbody = document.createElement('tbody');
+            const awayLine = (state.line && state.line.away) || [];
+            const homeLine = (state.line && state.line.home) || [];
+
+            // Away row
+            const trAway = document.createElement('tr');
+            trAway.className = 'border-b border-white/5 text-[11px]';
+            const tdAwayName = document.createElement('td');
+            tdAwayName.className = 'py-1 px-2 text-left font-bold text-white truncate max-w-[80px]';
+            tdAwayName.textContent = state.away || 'Away';
+            trAway.appendChild(tdAwayName);
+
+            for (let c = 0; c < totalCols; c++) {
+                const td = document.createElement('td');
+                td.className = 'py-1 px-1 font-mono text-slate-300';
+                if (c < awayLine.length) {
+                    td.textContent = String(awayLine[c]);
+                } else if (state.over || state.inning > c + 1 || (state.inning === c + 1 && !state.top)) {
+                    td.textContent = '0';
+                } else {
+                    td.textContent = '-';
+                }
+                trAway.appendChild(td);
+            }
+            const tdAwayR = document.createElement('td');
+            tdAwayR.className = 'py-1 px-2 font-mono font-bold text-pitchcyan';
+            tdAwayR.textContent = String(state.runs ? state.runs[0] : 0);
+            trAway.appendChild(tdAwayR);
+            tbody.appendChild(trAway);
+
+            // Home row
+            const trHome = document.createElement('tr');
+            trHome.className = 'text-[11px]';
+            const tdHomeName = document.createElement('td');
+            tdHomeName.className = 'py-1 px-2 text-left font-bold text-white truncate max-w-[80px]';
+            tdHomeName.textContent = state.home || 'Home';
+            trHome.appendChild(tdHomeName);
+
+            for (let c = 0; c < totalCols; c++) {
+                const td = document.createElement('td');
+                td.className = 'py-1 px-1 font-mono text-slate-300';
+                if (c < homeLine.length) {
+                    td.textContent = String(homeLine[c]);
+                } else if (state.over && c >= (state.innings || 9) - 1 && homeLine.length <= c && state.runs[1] > state.runs[0]) {
+                    td.textContent = 'X';
+                } else if (state.over || state.inning > c + 1) {
+                    td.textContent = '0';
+                } else {
+                    td.textContent = '-';
+                }
+                trHome.appendChild(td);
+            }
+            const tdHomeR = document.createElement('td');
+            tdHomeR.className = 'py-1 px-2 font-mono font-bold text-pitchcyan';
+            tdHomeR.textContent = String(state.runs ? state.runs[1] : 0);
+            trHome.appendChild(tdHomeR);
+            tbody.appendChild(trHome);
+
+            scoreLine.appendChild(tbody);
+        }
+
+        // 7. Buttons: awaiting_play & over conditions
+        scorePitchButtons.forEach(btn => {
+            btn.disabled = Boolean(state.awaiting_play || state.over);
+        });
+
+        if (scorePlayPicker) {
+            if (state.awaiting_play && !state.over) {
+                scorePlayPicker.classList.remove('hidden');
+            } else {
+                scorePlayPicker.classList.add('hidden');
+            }
+        }
+
+        if (scoreAdjustBtn) {
+            scoreAdjustBtn.disabled = Boolean(state.over);
+            if (state.over && scoreAdjust) {
+                scoreAdjust.classList.add('hidden');
+            }
+        }
+
+        scoreBaseButtons.forEach((btn, idx) => {
+            const isOcc = Boolean(state.bases && state.bases[idx]);
+            btn.dataset.active = isOcc ? 'true' : 'false';
+            if (isOcc) {
+                btn.classList.add('bg-pitchcyan', 'text-black', 'border-pitchcyan');
+                btn.classList.remove('bg-slate-800', 'text-slate-300', 'border-white/10');
+            } else {
+                btn.classList.remove('bg-pitchcyan', 'text-black', 'border-pitchcyan');
+                btn.classList.add('bg-slate-800', 'text-slate-300', 'border-white/10');
+            }
+        });
+    }
+
+    // Event listeners
+    if (scoreStartBtn) {
+        scoreStartBtn.addEventListener('click', async () => {
+            const away = (scoreAway && scoreAway.value.trim()) || 'Away';
+            const home = (scoreHome && scoreHome.value.trim()) || 'Home';
+            const innings = parseInt(scoreInnings && scoreInnings.value, 10) || 9;
+            try {
+                await scoreCall('/api/games', { away, home, innings });
+            } catch (e) {}
+        });
+    }
+
+    if (scoreNewBtn) {
+        scoreNewBtn.addEventListener('click', () => {
+            scoreSetStoredId(null);
+            scoreCurrentGameId = null;
+            scoreHideError();
+            scoreRender(null);
+        });
+    }
+
+    scorePitchButtons.forEach(btn => {
+        btn.addEventListener('click', async () => {
+            if (!scoreCurrentGameId) return;
+            const kind = btn.getAttribute('data-pitch');
+            try {
+                await scoreCall(`/api/games/${scoreCurrentGameId}/pitch`, { kind, source: 'manual' });
+            } catch (e) {}
+        });
+    });
+
+    scorePlayButtons.forEach(btn => {
+        btn.addEventListener('click', async () => {
+            if (!scoreCurrentGameId) return;
+            const outcome = btn.getAttribute('data-play');
+            try {
+                await scoreCall(`/api/games/${scoreCurrentGameId}/play`, { outcome });
+            } catch (e) {}
+        });
+    });
+
+    if (scoreAdjustBtn) {
+        scoreAdjustBtn.addEventListener('click', () => {
+            if (!scoreAdjust) return;
+            scoreAdjust.classList.toggle('hidden');
+            if (scoreRunsPlus) scoreRunsPlus.value = '0';
+            if (scoreOutsPlus) scoreOutsPlus.value = '0';
+        });
+    }
+
+    scoreBaseButtons.forEach((btn) => {
+        btn.addEventListener('click', () => {
+            const nowActive = btn.dataset.active !== 'true';
+            btn.dataset.active = nowActive ? 'true' : 'false';
+            if (nowActive) {
+                btn.classList.add('bg-pitchcyan', 'text-black', 'border-pitchcyan');
+                btn.classList.remove('bg-slate-800', 'text-slate-300', 'border-white/10');
+            } else {
+                btn.classList.remove('bg-pitchcyan', 'text-black', 'border-pitchcyan');
+                btn.classList.add('bg-slate-800', 'text-slate-300', 'border-white/10');
+            }
+        });
+    });
+
+    if (scoreAdjustApply) {
+        scoreAdjustApply.addEventListener('click', async () => {
+            if (!scoreCurrentGameId) return;
+            const b = [false, false, false];
+            scoreBaseButtons.forEach((btn, idx) => {
+                if (btn.dataset.active === 'true' && idx >= 0 && idx < 3) {
+                    b[idx] = true;
+                }
+            });
+            const runs = parseInt(scoreRunsPlus && scoreRunsPlus.value, 10) || 0;
+            const outs = parseInt(scoreOutsPlus && scoreOutsPlus.value, 10) || 0;
+            try {
+                await scoreCall(`/api/games/${scoreCurrentGameId}/adjust`, { bases: b, runs, outs });
+                if (scoreAdjust) scoreAdjust.classList.add('hidden');
+                if (scoreRunsPlus) scoreRunsPlus.value = '0';
+                if (scoreOutsPlus) scoreOutsPlus.value = '0';
+            } catch (e) {}
+        });
+    }
+
+    if (scoreUndoBtn) {
+        scoreUndoBtn.addEventListener('click', async () => {
+            if (!scoreCurrentGameId) return;
+            try {
+                await scoreCall(`/api/games/${scoreCurrentGameId}/undo`, {});
+            } catch (e) {}
+        });
+    }
+
+    // On page load: check localStorage for saved game id
+    function scoreInit() {
+        const savedId = scoreGetStoredId();
+        if (savedId) {
+            scoreCurrentGameId = savedId;
+            scoreCall(`/api/games/${savedId}`).catch(() => {
+                scoreSetStoredId(null);
+                scoreCurrentGameId = null;
+                scoreRender(null);
+            });
+        } else {
+            scoreRender(null);
+        }
+    }
+    scoreInit();
 });
+

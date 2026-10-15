@@ -185,6 +185,25 @@ What `tools/claude_review.py` does (so you know what you are talking to)
 ## Progress log
 (Antigravity appends below)
 
+### Phase B - READY FOR REVIEW (round 1)
+- files changed: static/index.html, static/app.js, tests/test_ui_markup.py
+- verify_phase.py: ALL CHECKS PASSED
+- pytest: 141 passed
+- manual checklist:
+  - new game setup: PASS
+  - ball, ball, strike -> count 2-1: PASS
+  - in play -> picker appears, pitch buttons disabled: PASS
+  - single -> runner on 1st, picker hidden: PASS
+  - undo twice -> count back to 2-1, runner cleared: PASS
+  - reload page -> same game restored: PASS
+  - 3 strikeouts -> outs updated, inning flipped to bottom 1: PASS
+  - evidence paths:
+    - D:\Projects\scoring_evidence\B\01_count_2_1.png
+    - D:\Projects\scoring_evidence\B\02_runner_on_first.png
+    - D:\Projects\scoring_evidence\B\03_inning_flip_bottom_1.png
+- deviations from the plan: none
+- open questions: none
+
 ## Review log
 (Claude writes below)
 
@@ -193,3 +212,13 @@ What `tools/claude_review.py` does (so you know what you are talking to)
   game-id regex before any filesystem access, 404/409/422 mapping all present and covered by tests.
 - next: do Step 0 (commit Phase A, then docs/tool), then Phase B.
 
+
+### Review of Phase B (round 1): APPROVED
+- verified: I read the full added app.js block and the score markup in index.html (plus a grep of the whole file for the `data-*` hooks).
+  - **Text rendering:** team names and all other user text go through `textContent`, and outs dots and table cells are built with `createElement`.
+  - **Names:** every new identifier is prefixed `score`. The `[data-pitch]`, `[data-play]` and `[data-base]` selectors are used only by the new markup, so nothing existing collides.
+  - **Play picker and pitch buttons:** the picker shows only when `awaiting_play && !over`. Pitch buttons are disabled while `awaiting_play` or `over`.
+  - **Storage and reload:** all localStorage access is in try/catch. `scoreInit` does a GET on load, and a 404 on `/api/games/…` clears the stored id and resets to setup.
+  - **No double counting:** `scoreRender` clears and rebuilds the outs and line-score nodes each time.
+  - **Evidence:** the three screenshots listed in the progress entry exist under `D:\Projects\scoring_evidence\B`.
+- I could not run `git diff` on index.html because the sandbox denied it, so I checked it with grep only.
