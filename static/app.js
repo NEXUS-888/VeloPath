@@ -95,6 +95,31 @@ document.addEventListener('DOMContentLoaded', () => {
     const helpModalBtn = document.getElementById('helpModalBtn');
     const closeHelpModalBtn = document.getElementById('closeHelpModalBtn');
 
+    // View Switching & Landing Elements
+    const landingView = document.getElementById('landingView');
+    const studioView = document.getElementById('studioView');
+    const viewOverviewBtn = document.getElementById('viewOverviewBtn');
+    const viewStudioBtn = document.getElementById('viewStudioBtn');
+    const landingDemoBtn = document.getElementById('landingDemoBtn');
+    const landingUploadBtn = document.getElementById('landingUploadBtn');
+    const landingExploreStudioBtn = document.getElementById('landingExploreStudioBtn');
+    const landingDropZone = document.getElementById('landingDropZone');
+    const landingPresetBtns = document.querySelectorAll('.landing-preset-btn');
+
+    // Teaser Pitch Elements
+    const teaserPitchFastball = document.getElementById('teaserPitchFastball');
+    const teaserPitchSlider = document.getElementById('teaserPitchSlider');
+    const teaserPitchCurve = document.getElementById('teaserPitchCurve');
+    const teaserReplayBtn = document.getElementById('teaserReplayBtn');
+    const teaserLaunchStudioBtn = document.getElementById('teaserLaunchStudioBtn');
+    const teaserVelocityVal = document.getElementById('teaserVelocityVal');
+    const teaserPlateVal = document.getElementById('teaserPlateVal');
+    const teaserDragVal = document.getElementById('teaserDragVal');
+    const teaserCallBadge = document.getElementById('teaserCallBadge');
+    const teaserFlightPath = document.getElementById('teaserFlightPath');
+    const teaserImpactCircle = document.getElementById('teaserImpactCircle');
+    const teaserImpactInner = document.getElementById('teaserImpactInner');
+
     // State Variables
     let currentPitchData = null;
     let isZoneCalibrating = false;
@@ -146,6 +171,228 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (modeBaseballBtn) modeBaseballBtn.addEventListener('click', () => setTrackingMode('baseball'));
     if (modeNormalBtn) modeNormalBtn.addEventListener('click', () => setTrackingMode('normal'));
+
+    // 2b. View Switching (Landing Overview vs Pro Studio)
+    function switchView(viewName) {
+        if (viewName === 'studio') {
+            if (landingView) landingView.classList.add('hidden');
+            if (studioView) studioView.classList.remove('hidden');
+            if (viewOverviewBtn) {
+                viewOverviewBtn.className = 'view-btn px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:text-white transition flex items-center gap-1.5';
+            }
+            if (viewStudioBtn) {
+                viewStudioBtn.className = 'view-btn px-3 py-1.5 rounded-lg text-xs font-bold bg-pitchcyan text-black shadow-sm transition flex items-center gap-1.5';
+            }
+            setTimeout(() => {
+                syncInteractiveBox();
+            }, 60);
+        } else {
+            if (studioView) studioView.classList.add('hidden');
+            if (landingView) landingView.classList.remove('hidden');
+            if (viewOverviewBtn) {
+                viewOverviewBtn.className = 'view-btn px-3 py-1.5 rounded-lg text-xs font-bold bg-pitchcyan text-black shadow-sm transition flex items-center gap-1.5';
+            }
+            if (viewStudioBtn) {
+                viewStudioBtn.className = 'view-btn px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:text-white transition flex items-center gap-1.5';
+            }
+        }
+        if (window.lucide) window.lucide.createIcons();
+    }
+
+    if (viewOverviewBtn) viewOverviewBtn.addEventListener('click', () => switchView('overview'));
+    if (viewStudioBtn) viewStudioBtn.addEventListener('click', () => switchView('studio'));
+    if (landingExploreStudioBtn) landingExploreStudioBtn.addEventListener('click', () => switchView('studio'));
+
+    // Teaser Pitch Presets & Simulation
+    const TEASER_PITCHES = {
+        fastball: {
+            velocity: '99.4',
+            plate: '91.8',
+            drag: '-7.6%',
+            callText: 'STRIKE (Quadrant 3)',
+            callClass: 'text-xs font-black tracking-wider uppercase px-2.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 glow-emerald',
+            pathD: 'M 480 220 Q 484 310 495 355',
+            impactX: 495,
+            impactY: 355,
+            impactColor: '#00E676'
+        },
+        slider: {
+            velocity: '86.2',
+            plate: '79.1',
+            drag: '-8.2%',
+            callText: 'STRIKE (Quadrant 9)',
+            callClass: 'text-xs font-black tracking-wider uppercase px-2.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 glow-emerald',
+            pathD: 'M 480 220 Q 498 300 545 420',
+            impactX: 545,
+            impactY: 420,
+            impactColor: '#00E676'
+        },
+        curve: {
+            velocity: '81.5',
+            plate: '73.4',
+            drag: '-9.9%',
+            callText: 'BALL (Below Zone)',
+            callClass: 'text-xs font-black tracking-wider uppercase px-2.5 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/40',
+            pathD: 'M 480 220 Q 476 300 460 495',
+            impactX: 460,
+            impactY: 495,
+            impactColor: '#F59E0B'
+        }
+    };
+
+    function selectTeaserPitch(pitchKey) {
+        const p = TEASER_PITCHES[pitchKey];
+        if (!p) return;
+
+        // Button states
+        const teaserPitchBtns = [
+            { btn: teaserPitchFastball, key: 'fastball' },
+            { btn: teaserPitchSlider, key: 'slider' },
+            { btn: teaserPitchCurve, key: 'curve' }
+        ];
+        teaserPitchBtns.forEach(({ btn, key }) => {
+            if (!btn) return;
+            if (key === pitchKey) {
+                btn.className = 'teaser-pitch-btn px-2.5 py-1 rounded-lg text-xs font-bold bg-pitchcyan text-black shadow-sm transition';
+            } else {
+                btn.className = 'teaser-pitch-btn px-2.5 py-1 rounded-lg text-xs font-medium text-slate-400 hover:text-white transition';
+            }
+        });
+
+        // Update telemetry display
+        if (teaserVelocityVal) teaserVelocityVal.textContent = p.velocity;
+        if (teaserPlateVal) teaserPlateVal.textContent = p.plate;
+        if (teaserDragVal) teaserDragVal.textContent = p.drag;
+        if (teaserCallBadge) {
+            teaserCallBadge.textContent = p.callText;
+            teaserCallBadge.className = p.callClass;
+        }
+
+        // Update SVG paths and impact points
+        if (teaserFlightPath) teaserFlightPath.setAttribute('d', p.pathD);
+        if (teaserImpactCircle) {
+            teaserImpactCircle.setAttribute('cx', p.impactX);
+            teaserImpactCircle.setAttribute('cy', p.impactY);
+            teaserImpactCircle.setAttribute('fill', p.impactColor);
+        }
+        if (teaserImpactInner) {
+            teaserImpactInner.setAttribute('cx', p.impactX);
+            teaserImpactInner.setAttribute('cy', p.impactY);
+        }
+
+        replayTeaserFlight();
+    }
+
+    function replayTeaserFlight() {
+        if (!teaserFlightPath) return;
+        try {
+            const pathLen = teaserFlightPath.getTotalLength ? (teaserFlightPath.getTotalLength() || 250) : 250;
+            teaserFlightPath.style.transition = 'none';
+            teaserFlightPath.style.strokeDasharray = `${pathLen}`;
+            teaserFlightPath.style.strokeDashoffset = `${pathLen}`;
+            if (teaserImpactCircle) teaserImpactCircle.style.opacity = '0';
+            if (teaserImpactInner) teaserImpactInner.style.opacity = '0';
+
+            requestAnimationFrame(() => {
+                teaserFlightPath.style.transition = 'stroke-dashoffset 0.65s cubic-bezier(0.25, 0.1, 0.25, 1)';
+                teaserFlightPath.style.strokeDashoffset = '0';
+                setTimeout(() => {
+                    if (teaserImpactCircle) {
+                        teaserImpactCircle.style.transition = 'opacity 0.2s ease';
+                        teaserImpactCircle.style.opacity = '1';
+                    }
+                    if (teaserImpactInner) {
+                        teaserImpactInner.style.transition = 'opacity 0.2s ease';
+                        teaserImpactInner.style.opacity = '0.6';
+                    }
+                }, 600);
+            });
+        } catch (e) {
+            if (teaserImpactCircle) teaserImpactCircle.style.opacity = '1';
+            if (teaserImpactInner) teaserImpactInner.style.opacity = '0.6';
+        }
+    }
+
+    if (teaserPitchFastball) teaserPitchFastball.addEventListener('click', () => selectTeaserPitch('fastball'));
+    if (teaserPitchSlider) teaserPitchSlider.addEventListener('click', () => selectTeaserPitch('slider'));
+    if (teaserPitchCurve) teaserPitchCurve.addEventListener('click', () => selectTeaserPitch('curve'));
+    if (teaserReplayBtn) teaserReplayBtn.addEventListener('click', replayTeaserFlight);
+    if (teaserLaunchStudioBtn) {
+        teaserLaunchStudioBtn.addEventListener('click', () => {
+            switchView('studio');
+            if (samplePitchBtn) samplePitchBtn.click();
+        });
+    }
+
+    // Landing Hub Actions
+    if (landingDemoBtn) {
+        landingDemoBtn.addEventListener('click', () => {
+            switchView('studio');
+            if (samplePitchBtn) samplePitchBtn.click();
+        });
+    }
+
+    if (landingUploadBtn) {
+        landingUploadBtn.addEventListener('click', () => {
+            if (videoUploadInput) videoUploadInput.click();
+        });
+    }
+
+    if (landingDropZone) {
+        landingDropZone.addEventListener('click', () => {
+            if (videoUploadInput) videoUploadInput.click();
+        });
+        ['dragenter', 'dragover'].forEach(name => {
+            landingDropZone.addEventListener(name, (e) => {
+                e.preventDefault();
+                landingDropZone.classList.add('border-pitchcyan', 'bg-slate-900/90');
+            });
+        });
+        ['dragleave', 'drop'].forEach(name => {
+            landingDropZone.addEventListener(name, (e) => {
+                e.preventDefault();
+                landingDropZone.classList.remove('border-pitchcyan', 'bg-slate-900/90');
+            });
+        });
+        landingDropZone.addEventListener('drop', (e) => {
+            if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                stageClip(e.dataTransfer.files[0]);
+            }
+        });
+    }
+
+    // Quick-Start Preset Buttons
+    landingPresetBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const dist = btn.getAttribute('data-preset-dist');
+            const mode = btn.getAttribute('data-preset-mode');
+            const ball = btn.getAttribute('data-preset-ball');
+
+            if (dist) {
+                if (distancePresetSelect) {
+                    distancePresetSelect.value = dist;
+                    if (dist === 'custom') {
+                        if (customDistanceRow) customDistanceRow.classList.remove('hidden');
+                    } else {
+                        if (customDistanceRow) customDistanceRow.classList.add('hidden');
+                    }
+                }
+            }
+
+            if (mode) {
+                setTrackingMode(mode);
+            }
+
+            if (ball && ballTypeSelect) {
+                ballTypeSelect.value = ball;
+            }
+
+            switchView('studio');
+        });
+    });
+
+    // Run initial teaser flight animation once ready
+    setTimeout(replayTeaserFlight, 300);
 
     // 3. Check System Hardware Acceleration
     async function checkHardwareHealth() {
@@ -942,6 +1189,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let pendingClip = null;  // {file, url, start, end}
 
     function stageClip(file) {
+        switchView('studio');
         if (pendingClip) URL.revokeObjectURL(pendingClip.url);
         pendingClip = { file, url: URL.createObjectURL(file), start: 0, end: null };
         calibrationTaps = null;  // taps belong to the previous clip's camera
@@ -1010,6 +1258,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 18. Sample Pitch Demo
     samplePitchBtn.addEventListener('click', async () => {
+        switchView('studio');
         loadingOverlay.classList.remove('hidden');
         loadingStatusText.textContent = 'Processing Demo Pitch...';
         try {
@@ -1228,13 +1477,37 @@ document.addEventListener('DOMContentLoaded', () => {
         const base1 = document.getElementById('scoreBase1');
         const base2 = document.getElementById('scoreBase2');
         if (base0) {
-            base0.setAttribute('fill', state.bases && state.bases[0] ? '#00f3ff' : 'rgba(255,255,255,0.2)');
+            const isOcc0 = Boolean(state.bases && state.bases[0]);
+            base0.setAttribute('fill', isOcc0 ? '#00f3ff' : 'rgba(255,255,255,0.2)');
+            if (isOcc0) {
+                base0.classList.add('base-occupied');
+                base0.classList.remove('base-empty');
+            } else {
+                base0.classList.remove('base-occupied');
+                base0.classList.add('base-empty');
+            }
         }
         if (base1) {
-            base1.setAttribute('fill', state.bases && state.bases[1] ? '#00f3ff' : 'rgba(255,255,255,0.2)');
+            const isOcc1 = Boolean(state.bases && state.bases[1]);
+            base1.setAttribute('fill', isOcc1 ? '#00f3ff' : 'rgba(255,255,255,0.2)');
+            if (isOcc1) {
+                base1.classList.add('base-occupied');
+                base1.classList.remove('base-empty');
+            } else {
+                base1.classList.remove('base-occupied');
+                base1.classList.add('base-empty');
+            }
         }
         if (base2) {
-            base2.setAttribute('fill', state.bases && state.bases[2] ? '#00f3ff' : 'rgba(255,255,255,0.2)');
+            const isOcc2 = Boolean(state.bases && state.bases[2]);
+            base2.setAttribute('fill', isOcc2 ? '#00f3ff' : 'rgba(255,255,255,0.2)');
+            if (isOcc2) {
+                base2.classList.add('base-occupied');
+                base2.classList.remove('base-empty');
+            } else {
+                base2.classList.remove('base-occupied');
+                base2.classList.add('base-empty');
+            }
         }
 
         // 5. Final game banner
