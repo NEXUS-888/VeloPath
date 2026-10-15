@@ -217,3 +217,37 @@ def test_pitch_can_carry_the_measured_pitch_into_the_log(client, games_dir):
     gid = client.post("/api/games", json={}).json()["id"]
     s = client.post(f"/api/games/{gid}/pitch", json={"kind": "strike", "mph": 84.5, "source": "abs"}).json()
     assert s["log"][-1]["mph"] == 84.5 and s["log"][-1]["source"] == "abs"
+
+
+def test_export_csv(client, games_dir):
+    import csv
+    import io
+
+    g = client.post("/api/games", json={"away": "Tigers, Detroit", "home": "Lions", "innings": 9}).json()
+    gid = g["id"]
+
+    assert client.get("/api/games/nonexistent/export.csv").status_code == 404
+    assert client.get("/api/games/..%2Fbad/export.csv").status_code in (404, 422)
+
+    client.post(f"/api/games/{gid}/pitch", json={"kind": "strike", "mph": 85.5, "source": "abs"})
+    client.post(f"/api/games/{gid}/pitch", json={"kind": "ball"})
+
+    res = client.get(f"/api/games/{gid}/export.csv")
+    assert res.status_code == 200
+    assert "text/csv" in res.headers["content-type"]
+    assert f'filename="game-{gid}.csv"' in res.headers.get("content-disposition", "")
+
+    reader = list(csv.reader(io.StringIO(res.text)))
+    assert len(reader) == 3
+    assert reader[0] == ["inning", "half", "kind", "balls", "strikes", "outs", "away_runs", "home_runs", "mph", "source"]
+
+    assert reader[1][0] == "1"
+    assert reader[1][1] == "top"
+    assert reader[1][2] == "strike"
+    assert reader[1][8] == "85.5"
+    assert reader[1][9] == "abs"
+
+    assert reader[2][2] == "ball"
+    assert reader[2][8] == ""
+    assert reader[2][9] == ""
+

@@ -9,6 +9,8 @@ import threading
 import time
 import uuid
 import glob
+import csv
+import io
 import json
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException, Request, Response, status
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, StreamingResponse, RedirectResponse
@@ -292,6 +294,36 @@ def game_adjust(game_id: str, body: AdjustBody):
 @app.post("/api/games/{game_id}/undo")
 def game_undo(game_id: str):
     return _game_action(game_id, lambda g: g.undo())
+
+
+@app.get("/api/games/{game_id}/export.csv")
+def export_game_csv(game_id: str):
+    with _GAMES_LOCK:
+        game = _load_game(game_id)
+        buf = io.StringIO()
+        writer = csv.writer(buf)
+        writer.writerow(["inning", "half", "kind", "balls", "strikes", "outs", "away_runs", "home_runs", "mph", "source"])
+        for entry in game.log:
+            half = "top" if entry.get("top") else "bottom"
+            runs = entry.get("runs") or [0, 0]
+            writer.writerow([
+                entry.get("inning", 1),
+                half,
+                entry.get("kind", ""),
+                entry.get("balls", 0),
+                entry.get("strikes", 0),
+                entry.get("outs", 0),
+                runs[0] if len(runs) > 0 else 0,
+                runs[1] if len(runs) > 1 else 0,
+                entry.get("mph", "") if entry.get("mph") is not None else "",
+                entry.get("source", "") if entry.get("source") is not None else "",
+            ])
+        return Response(
+            content=buf.getvalue(),
+            media_type="text/csv",
+            headers={"Content-Disposition": f'attachment; filename="game-{game_id}.csv"'}
+        )
+
 
 
 @app.post("/api/rerender")

@@ -235,6 +235,20 @@ What `tools/claude_review.py` does (so you know what you are talking to)
 - deviations from the plan: none
 - open questions: none
 
+### Phase D - READY FOR REVIEW (round 1)
+- files changed: velopath/server.py, tests/test_server.py, static/index.html, static/app.js, tests/test_ui_markup.py
+- verify_phase.py: ALL CHECKS PASSED
+- pytest: 144 passed
+- manual checklist:
+  - game log toggle -> shows last 30 events newest first: PASS
+  - export CSV link -> downloads valid CSV with header and rows: PASS
+  - mph and source filled only when present: PASS
+  - evidence paths:
+    - D:\Projects\scoring_evidence\D\01_scoreboard_ready_to_export.png
+    - D:\Projects\scoring_evidence\D\02_collapsible_log_expanded.png
+- deviations from the plan: none
+- open questions: none
+
 ## Review log
 (Claude writes below)
 
@@ -268,3 +282,6 @@ What `tools/claude_review.py` does (so you know what you are talking to)
   - **Re-render:** `video_id` is set on both the upload and reprocess responses. It is stored on Add, Foul, In play, Hit batter and Skip, so re-rendering the same clip does not re-offer it. The state resets on new game or reset.
   - **Safety:** text is set through `textContent`. No new globals clash with existing names except `window.scoreOfferConfirm`, which is unique. The `scoreOfferConfirm` call is inside the same `DOMContentLoaded` closure, so the `typeof` guard works. No existing functions or shortcuts were changed.
 - Residual, not blocking: only the last-handled `video_id` is remembered. An older clip that was already added or skipped could be offered again after a different clip is handled.
+
+### Review of Phase D (round 1): APPROVED
+- verified: I read the diffs of `server.py`, `app.js` and `index.html`, plus `_load_game` and the scorebook log and state shapes. The export route builds the CSV with the `csv` module, so a comma in a field stays in one cell. It goes through `_load_game`, which checks the id with `fullmatch [A-Za-z0-9]{1,32}` and returns 404 for a bad or missing id, so path traversal is blocked. It runs under `_GAMES_LOCK`, sends `Content-Disposition: attachment`, and leaves mph and source empty when they are missing. The log UI uses `textContent` and clears with `removeChild`, so re-rendering does not double up entries. The new `app.js` names are scoped inside the DOMContentLoaded closure, and no existing functions or shortcuts changed. `state.log` is included in the API state, so the UI log has data to show.

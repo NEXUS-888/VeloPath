@@ -70,3 +70,13 @@ def test_phase_c_confirm_bar_markup_and_rules():
         "Skip handler must record the video_id to avoid double offering"
 
 
+def test_phase_d_log_and_export_markup():
+    client = TestClient(app)
+    res = client.get("/")
+    assert res.status_code == 200
+    html = res.text
+    for elem_id in ["scoreLogToggle", "scoreLog", "scoreExport"]:
+        assert f'id="{elem_id}"' in html, f"Missing id='{elem_id}' in index.html"
+
+
+

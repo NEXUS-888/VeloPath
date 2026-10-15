@@ -1093,6 +1093,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const scoreConfirmInPlay = document.getElementById('scoreConfirmInPlay');
     const scoreConfirmHbp = document.getElementById('scoreConfirmHbp');
     const scoreConfirmSkip = document.getElementById('scoreConfirmSkip');
+    const scoreLogToggle = document.getElementById('scoreLogToggle');
+    const scoreLog = document.getElementById('scoreLog');
+    const scoreExport = document.getElementById('scoreExport');
     const scoreError = document.getElementById('scoreError');
 
     let scoreLastAddedVideoId = null;
@@ -1177,6 +1180,13 @@ document.addEventListener('DOMContentLoaded', () => {
             if (scoreSetup) scoreSetup.classList.remove('hidden');
             if (scoreDisplay) scoreDisplay.classList.add('hidden');
             if (scoreConfirm) scoreConfirm.classList.add('hidden');
+            if (scoreExport) {
+                scoreExport.href = '#';
+                scoreExport.classList.add('pointer-events-none', 'opacity-40');
+            }
+            if (scoreLog) {
+                while (scoreLog.firstChild) scoreLog.removeChild(scoreLog.firstChild);
+            }
             return;
         }
 
@@ -1372,6 +1382,32 @@ document.addEventListener('DOMContentLoaded', () => {
             confirmButtons.forEach(btn => { if (btn) btn.disabled = true; });
         } else {
             confirmButtons.forEach(btn => { if (btn) btn.disabled = false; });
+        }
+
+        // 9. Game Log & CSV Export (Phase D)
+        if (scoreExport) {
+            scoreExport.href = scoreCurrentGameId ? `/api/games/${scoreCurrentGameId}/export.csv` : '#';
+            if (scoreCurrentGameId) {
+                scoreExport.classList.remove('pointer-events-none', 'opacity-40');
+            } else {
+                scoreExport.classList.add('pointer-events-none', 'opacity-40');
+            }
+        }
+
+        if (scoreLog) {
+            while (scoreLog.firstChild) {
+                scoreLog.removeChild(scoreLog.firstChild);
+            }
+            const events = (state.log || []).slice(-30).reverse();
+            events.forEach(entry => {
+                const half = entry.top ? 'Top' : 'Bottom';
+                const count = `${entry.balls}-${entry.strikes}`;
+                const mphStr = entry.mph !== undefined && entry.mph !== null ? ` | ${entry.mph} mph` : '';
+                const item = document.createElement('div');
+                item.className = 'text-[11px] text-slate-300 py-0.5 border-b border-white/5 last:border-0 truncate font-mono';
+                item.textContent = `${half} ${entry.inning} | ${entry.kind} ${count}${mphStr}`;
+                scoreLog.appendChild(item);
+            });
         }
     }
 
@@ -1595,6 +1631,12 @@ document.addEventListener('DOMContentLoaded', () => {
             try {
                 await scoreCall(`/api/games/${scoreCurrentGameId}/undo`, {});
             } catch (e) {}
+        });
+    }
+
+    if (scoreLogToggle) {
+        scoreLogToggle.addEventListener('click', () => {
+            if (scoreLog) scoreLog.classList.toggle('hidden');
         });
     }
 
