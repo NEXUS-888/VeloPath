@@ -731,6 +731,11 @@ document.addEventListener('DOMContentLoaded', () => {
             video.load();
             video.play().catch(() => {});
         }
+
+        // Score confirm bar feed (Phase C)
+        if (typeof scoreOfferConfirm === 'function') {
+            scoreOfferConfirm(data);
+        }
     }
 
     // 15. Fast Re-Render (~1s) on Strike Zone or Visual Change
@@ -1082,7 +1087,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const scoreOutsPlus = document.getElementById('scoreOutsPlus');
     const scoreAdjustApply = document.getElementById('scoreAdjustApply');
     const scoreConfirm = document.getElementById('scoreConfirm');
+    const scoreConfirmText = document.getElementById('scoreConfirmText');
+    const scoreConfirmAdd = document.getElementById('scoreConfirmAdd');
+    const scoreConfirmFoul = document.getElementById('scoreConfirmFoul');
+    const scoreConfirmInPlay = document.getElementById('scoreConfirmInPlay');
+    const scoreConfirmHbp = document.getElementById('scoreConfirmHbp');
+    const scoreConfirmSkip = document.getElementById('scoreConfirmSkip');
     const scoreError = document.getElementById('scoreError');
+
+    let scoreLastAddedVideoId = null;
+    let scorePendingPitch = null;
 
     // Storage helpers
     function scoreGetStoredId() {
@@ -1162,6 +1176,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!state) {
             if (scoreSetup) scoreSetup.classList.remove('hidden');
             if (scoreDisplay) scoreDisplay.classList.add('hidden');
+            if (scoreConfirm) scoreConfirm.classList.add('hidden');
             return;
         }
 
@@ -1342,7 +1357,82 @@ document.addEventListener('DOMContentLoaded', () => {
                 btn.classList.add('bg-slate-800', 'text-slate-300', 'border-white/10');
             }
         });
+
+        // 8. Confirm bar state sync if open
+        const confirmButtons = [scoreConfirmAdd, scoreConfirmFoul, scoreConfirmInPlay, scoreConfirmHbp, scoreConfirmSkip];
+        if (state.over) {
+            if (scoreConfirmText && scoreConfirm && !scoreConfirm.classList.contains('hidden')) {
+                scoreConfirmText.textContent = "Game Over: Pitch not added";
+            }
+            confirmButtons.forEach(btn => { if (btn) btn.disabled = true; });
+        } else if (state.awaiting_play) {
+            if (scoreConfirmText && scoreConfirm && !scoreConfirm.classList.contains('hidden')) {
+                scoreConfirmText.textContent = "Resolve ball in play before next pitch";
+            }
+            confirmButtons.forEach(btn => { if (btn) btn.disabled = true; });
+        } else {
+            confirmButtons.forEach(btn => { if (btn) btn.disabled = false; });
+        }
     }
+
+    // Phase C: Offer pitch result in #scoreConfirm
+    function scoreOfferConfirm(data) {
+        if (!data || !scoreCurrentGameId || !scoreCurrentState) {
+            if (scoreConfirm) scoreConfirm.classList.add('hidden');
+            return;
+        }
+
+        // Rule 1: Offer only when pitch_detected === true, zone_calibrated === true and call is STRIKE or BALL.
+        // For SET ZONE, NO PITCH DETECTED or normal mode: do not auto-suggest.
+        if (activeTrackingMode === 'normal' || (data.mode && data.mode === 'normal')) {
+            if (scoreConfirm) scoreConfirm.classList.add('hidden');
+            return;
+        }
+        if (data.pitch_detected !== true || data.zone_calibrated !== true) {
+            if (scoreConfirm) scoreConfirm.classList.add('hidden');
+            return;
+        }
+        if (data.call !== 'STRIKE' && data.call !== 'BALL') {
+            if (scoreConfirm) scoreConfirm.classList.add('hidden');
+            return;
+        }
+
+        // Rule 3: No double counting - remember last data.video_id added
+        if (data.video_id && data.video_id === scoreLastAddedVideoId) {
+            if (scoreConfirm) scoreConfirm.classList.add('hidden');
+            return;
+        }
+
+        const mph = typeof data.velocity_mph === 'number' ? Math.round(data.velocity_mph * 10) / 10 : null;
+        scorePendingPitch = {
+            call: data.call,
+            mph: mph,
+            video_id: data.video_id || null
+        };
+
+        const confirmButtons = [scoreConfirmAdd, scoreConfirmFoul, scoreConfirmInPlay, scoreConfirmHbp, scoreConfirmSkip];
+
+        // Rule 5: If the game is over or awaiting_play, show the bar disabled with the reason
+        if (scoreCurrentState.over) {
+            if (scoreConfirmText) scoreConfirmText.textContent = "Game Over: Pitch not added";
+            confirmButtons.forEach(btn => { if (btn) btn.disabled = true; });
+            if (scoreConfirm) scoreConfirm.classList.remove('hidden');
+            return;
+        }
+
+        if (scoreCurrentState.awaiting_play) {
+            if (scoreConfirmText) scoreConfirmText.textContent = "Resolve ball in play before next pitch";
+            confirmButtons.forEach(btn => { if (btn) btn.disabled = true; });
+            if (scoreConfirm) scoreConfirm.classList.remove('hidden');
+            return;
+        }
+
+        confirmButtons.forEach(btn => { if (btn) btn.disabled = false; });
+        const mphStr = mph !== null ? `, ${mph.toFixed(1)} mph` : '';
+        if (scoreConfirmText) scoreConfirmText.textContent = `Pitch: ${data.call}${mphStr}`;
+        if (scoreConfirm) scoreConfirm.classList.remove('hidden');
+    }
+    window.scoreOfferConfirm = scoreOfferConfirm;
 
     // Event listeners
     if (scoreStartBtn) {
@@ -1350,6 +1440,9 @@ document.addEventListener('DOMContentLoaded', () => {
             const away = (scoreAway && scoreAway.value.trim()) || 'Away';
             const home = (scoreHome && scoreHome.value.trim()) || 'Home';
             const innings = parseInt(scoreInnings && scoreInnings.value, 10) || 9;
+            scoreLastAddedVideoId = null;
+            scorePendingPitch = null;
+            if (scoreConfirm) scoreConfirm.classList.add('hidden');
             try {
                 await scoreCall('/api/games', { away, home, innings });
             } catch (e) {}
@@ -1360,8 +1453,76 @@ document.addEventListener('DOMContentLoaded', () => {
         scoreNewBtn.addEventListener('click', () => {
             scoreSetStoredId(null);
             scoreCurrentGameId = null;
+            scoreLastAddedVideoId = null;
+            scorePendingPitch = null;
             scoreHideError();
+            if (scoreConfirm) scoreConfirm.classList.add('hidden');
             scoreRender(null);
+        });
+    }
+
+    // Confirm bar actions
+    if (scoreConfirmAdd) {
+        scoreConfirmAdd.addEventListener('click', async () => {
+            if (!scorePendingPitch || !scoreCurrentGameId) return;
+            const payload = {
+                kind: scorePendingPitch.call.toLowerCase(),
+                source: "abs"
+            };
+            if (scorePendingPitch.mph !== null) payload.mph = scorePendingPitch.mph;
+            scoreLastAddedVideoId = scorePendingPitch.video_id;
+            if (scoreConfirm) scoreConfirm.classList.add('hidden');
+            try {
+                await scoreCall(`/api/games/${scoreCurrentGameId}/pitch`, payload);
+            } catch (e) {}
+        });
+    }
+
+    if (scoreConfirmFoul) {
+        scoreConfirmFoul.addEventListener('click', async () => {
+            if (!scorePendingPitch || !scoreCurrentGameId) return;
+            const payload = { kind: "foul", source: "manual" };
+            if (scorePendingPitch.mph !== null) payload.mph = scorePendingPitch.mph;
+            scoreLastAddedVideoId = scorePendingPitch.video_id;
+            if (scoreConfirm) scoreConfirm.classList.add('hidden');
+            try {
+                await scoreCall(`/api/games/${scoreCurrentGameId}/pitch`, payload);
+            } catch (e) {}
+        });
+    }
+
+    if (scoreConfirmInPlay) {
+        scoreConfirmInPlay.addEventListener('click', async () => {
+            if (!scorePendingPitch || !scoreCurrentGameId) return;
+            const payload = { kind: "in_play", source: "manual" };
+            if (scorePendingPitch.mph !== null) payload.mph = scorePendingPitch.mph;
+            scoreLastAddedVideoId = scorePendingPitch.video_id;
+            if (scoreConfirm) scoreConfirm.classList.add('hidden');
+            try {
+                await scoreCall(`/api/games/${scoreCurrentGameId}/pitch`, payload);
+            } catch (e) {}
+        });
+    }
+
+    if (scoreConfirmHbp) {
+        scoreConfirmHbp.addEventListener('click', async () => {
+            if (!scorePendingPitch || !scoreCurrentGameId) return;
+            const payload = { kind: "hbp", source: "manual" };
+            if (scorePendingPitch.mph !== null) payload.mph = scorePendingPitch.mph;
+            scoreLastAddedVideoId = scorePendingPitch.video_id;
+            if (scoreConfirm) scoreConfirm.classList.add('hidden');
+            try {
+                await scoreCall(`/api/games/${scoreCurrentGameId}/pitch`, payload);
+            } catch (e) {}
+        });
+    }
+
+    if (scoreConfirmSkip) {
+        scoreConfirmSkip.addEventListener('click', () => {
+            if (scorePendingPitch) {
+                scoreLastAddedVideoId = scorePendingPitch.video_id;
+            }
+            if (scoreConfirm) scoreConfirm.classList.add('hidden');
         });
     }
 

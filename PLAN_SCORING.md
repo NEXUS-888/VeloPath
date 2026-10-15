@@ -204,6 +204,37 @@ What `tools/claude_review.py` does (so you know what you are talking to)
 - deviations from the plan: none
 - open questions: none
 
+### Phase C - READY FOR REVIEW (round 1)
+- files changed: static/index.html, static/app.js, tests/test_ui_markup.py
+- verify_phase.py: ALL CHECKS PASSED
+- pytest: 142 passed
+- manual checklist:
+  - process clip with calibrated zone -> bar appears: PASS
+  - add as is -> pitch posted with abs source, count changes: PASS
+  - drag zone / re-render same clip -> bar does not reappear (no double counting): PASS
+  - evidence paths:
+    - D:\Projects\scoring_evidence\C\01_confirm_bar_offered.png
+    - D:\Projects\scoring_evidence\C\02_pitch_added_count_0_1.png
+    - D:\Projects\scoring_evidence\C\03_rerender_no_double_count.png
+- deviations from the plan: none
+- open questions: none
+
+### Phase C - READY FOR REVIEW (round 2)
+- files changed: static/index.html, static/app.js, tests/test_ui_markup.py
+- verify_phase.py: ALL CHECKS PASSED
+- pytest: 142 passed
+- manual checklist:
+  - process clip with calibrated zone -> bar appears: PASS
+  - add as is -> pitch posted with abs source, count changes: PASS
+  - drag zone / re-render same clip -> bar does not reappear (no double counting): PASS
+  - skip button -> records video_id so re-render does not reappear: PASS
+  - evidence paths:
+    - D:\Projects\scoring_evidence\C\01_confirm_bar_offered.png
+    - D:\Projects\scoring_evidence\C\02_pitch_added_count_0_1.png
+    - D:\Projects\scoring_evidence\C\03_rerender_no_double_count.png
+- deviations from the plan: none
+- open questions: none
+
 ## Review log
 (Claude writes below)
 
@@ -222,3 +253,18 @@ What `tools/claude_review.py` does (so you know what you are talking to)
   - **No double counting:** `scoreRender` clears and rebuilds the outs and line-score nodes each time.
   - **Evidence:** the three screenshots listed in the progress entry exist under `D:\Projects\scoring_evidence\B`.
 - I could not run `git diff` on index.html because the sandbox denied it, so I checked it with grep only.
+
+### Review of Phase C (round 1): CHANGES REQUESTED
+- verified: I read the app.js diff (`scoreOfferConfirm`, the feed call, the five button handlers, the state-sync block, game reset), the index.html and test diffs, and the server `video_id` and pipeline `call` fields. The offer gates, `velocity_mph`, `source: 'abs'` only on "Add as is", the disabled states, textContent-only writes and the absence of nothing-added-without-a-tap paths are all correct. The one gap is dedupe after Skip.
+- must fix:
+  1. static/app.js:1514 (`scoreConfirmSkip` click handler) – Skip only hides the bar and never records the clip's `video_id`. If the user taps Skip and then drags the zone or re-renders the same clip, `scoreOfferConfirm` runs again with the same `video_id`, and the bar reappears even though that clip was already offered. -> In the Skip handler, set `scoreLastAddedVideoId = scorePendingPitch ? scorePendingPitch.video_id : scoreLastAddedVideoId` before hiding the bar. Optionally rename the variable to `scoreLastOfferedVideoId`. Extend `tests/test_ui_markup.py` with an assertion that the Skip handler assigns the offered-id variable, for example by checking the text between `scoreConfirmSkip.addEventListener` and its closing `});`.
+
+### Review of Phase C (round 2): APPROVED
+- verified: I read the `app.js` and `index.html` diffs and checked `server.py` for `video_id`.
+  - **Gating:** `scoreOfferConfirm` shows the bar only when `pitch_detected === true`, `zone_calibrated === true` and the call is STRIKE or BALL. It hides the bar in normal mode and when no game is open.
+  - **No auto-add:** every pitch post happens inside a click handler, so nothing is added without a tap.
+  - **Pitch fields:** `source: "abs"` is set only by "Add as is". Foul, In play and Hit batter send `manual`. `mph` comes from `velocity_mph`.
+  - **Over / awaiting play:** the bar is shown disabled with the reason when the game is over or awaiting play, and `syncScoreboard` keeps it in step.
+  - **Re-render:** `video_id` is set on both the upload and reprocess responses. It is stored on Add, Foul, In play, Hit batter and Skip, so re-rendering the same clip does not re-offer it. The state resets on new game or reset.
+  - **Safety:** text is set through `textContent`. No new globals clash with existing names except `window.scoreOfferConfirm`, which is unique. The `scoreOfferConfirm` call is inside the same `DOMContentLoaded` closure, so the `typeof` guard works. No existing functions or shortcuts were changed.
+- Residual, not blocking: only the last-handled `video_id` is remembered. An older clip that was already added or skipped could be offered again after a different clip is handled.

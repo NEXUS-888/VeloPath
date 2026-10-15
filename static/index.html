@@ -555,17 +555,17 @@
                         <table id="scoreLine" class="w-full text-xs text-center border-collapse"></table>
                     </div>
 
-                    <!-- Phase C Confirm Bar (hidden for now) -->
+                    <!-- Phase C Confirm Bar -->
                     <div id="scoreConfirm" class="hidden p-2.5 rounded-xl bg-slate-900 border border-pitchcyan/40 space-y-2">
                         <div class="flex items-center justify-between text-xs">
                             <span id="scoreConfirmText" class="font-bold text-white">Pitch: STRIKE, 84.5 mph</span>
                         </div>
                         <div class="grid grid-cols-5 gap-1 text-[11px]">
-                            <button type="button" id="scoreConfirmAdd" class="p-1 rounded bg-pitchcyan text-black font-bold">Add</button>
-                            <button type="button" id="scoreConfirmFoul" class="p-1 rounded bg-slate-800 text-slate-300 hover:text-white">Foul</button>
-                            <button type="button" id="scoreConfirmInPlay" class="p-1 rounded bg-slate-800 text-slate-300 hover:text-white">In Play</button>
-                            <button type="button" id="scoreConfirmHbp" class="p-1 rounded bg-slate-800 text-slate-300 hover:text-white">HBP</button>
-                            <button type="button" id="scoreConfirmSkip" class="p-1 rounded bg-slate-800 text-slate-400 hover:text-white">Skip</button>
+                            <button type="button" id="scoreConfirmAdd" class="p-1 rounded bg-pitchcyan hover:bg-cyan-300 text-black font-bold transition disabled:opacity-40 disabled:cursor-not-allowed">Add as is</button>
+                            <button type="button" id="scoreConfirmFoul" class="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition disabled:opacity-40 disabled:cursor-not-allowed">Foul</button>
+                            <button type="button" id="scoreConfirmInPlay" class="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition disabled:opacity-40 disabled:cursor-not-allowed">In play</button>
+                            <button type="button" id="scoreConfirmHbp" class="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition disabled:opacity-40 disabled:cursor-not-allowed">Hit batter</button>
+                            <button type="button" id="scoreConfirmSkip" class="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition">Skip</button>
                         </div>
                     </div>
 

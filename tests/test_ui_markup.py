@@ -46,3 +46,27 @@ def test_no_inner_html_in_score_code():
     score_funcs = re.findall(r"function\s+score\w+[^{]*\{[\s\S]*?\n\}", js)
     for func in score_funcs:
         assert "innerHTML" not in func, f"Found innerHTML in score function:\n{func}"
+
+
+def test_phase_c_confirm_bar_markup_and_rules():
+    client = TestClient(app)
+    res = client.get("/")
+    assert res.status_code == 200
+    html = res.text
+    for btn_id in ["scoreConfirmAdd", "scoreConfirmFoul", "scoreConfirmInPlay", "scoreConfirmHbp", "scoreConfirmSkip"]:
+        assert f'id="{btn_id}"' in html, f"Missing id='{btn_id}' in index.html"
+
+    with open("static/app.js", encoding="utf-8") as f:
+        js = f.read()
+
+    assert "scoreOfferConfirm" in js, "Missing scoreOfferConfirm function in app.js"
+    assert "pitch_detected" in js
+    assert "zone_calibrated" in js
+    assert "velocity_mph" in js
+
+    skip_handler = re.search(r"scoreConfirmSkip\.addEventListener\([^)]*\)\s*=>\s*\{([\s\S]*?)\}\);", js)
+    assert skip_handler is not None, "scoreConfirmSkip click listener not found"
+    assert "scoreLastAddedVideoId" in skip_handler.group(1) or "scoreLastOfferedVideoId" in skip_handler.group(1), \
+        "Skip handler must record the video_id to avoid double offering"
+
+
