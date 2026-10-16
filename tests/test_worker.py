@@ -197,3 +197,39 @@ def test_tracker_exception_gives_state_error_and_server_alive():
         assert health["busy"] is False
     finally:
         srv.shutdown()
+
+
+def test_package_creates_valid_zip_and_can_import_tracker(tmp_path):
+    import subprocess
+    import sys
+    import zipfile
+
+    pkg_script = os.path.join(ROOT, "worker", "package.py")
+    out_zip = tmp_path / "test_worker.zip"
+    res = subprocess.run([sys.executable, pkg_script, "--out", str(out_zip)], capture_output=True, text=True)
+    assert res.returncode == 0, f"package.py failed: {res.stderr}\n{res.stdout}"
+    assert out_zip.exists()
+
+    extract_dir = tmp_path / "extracted"
+    extract_dir.mkdir()
+    with zipfile.ZipFile(out_zip) as z:
+        z.extractall(extract_dir)
+
+    # Key should NOT be in zip unless --with-key
+    assert not (extract_dir / "key.txt").exists()
+    assert (extract_dir / "velopath_worker.py").exists()
+    assert (extract_dir / "velopath" / "tracker.py").exists()
+
+    # Check import velopath.tracker from extracted dir with clean PYTHONPATH
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(extract_dir)
+    check = subprocess.run(
+        [sys.executable, "-c", "import velopath.tracker; print('OK')"],
+        cwd=str(extract_dir),
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert check.returncode == 0, f"Import failed: {check.stderr}\n{check.stdout}"
+    assert "OK" in check.stdout
+

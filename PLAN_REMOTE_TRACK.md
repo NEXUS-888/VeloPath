@@ -119,4 +119,15 @@ If a step fails twice, write STUCK with the error and stop.
   - Backward compatibility with legacy `/predict` preserved for Step 1-5.
 - Anything surprising: None; ThreadingHTTPServer and chunked body streaming worked seamlessly.
 
+### Step 2 - DONE
+- Files changed: `worker/package.py`, `tests/test_worker.py`, `PLAN_REMOTE_TRACK.md`.
+- Pytest result: `153 passed, 2 deselected in 66.66s (0:01:06)`.
+- What was verified:
+  - `python worker/package.py` packages standalone `velopath_gpu_worker.zip`.
+  - Excludes `key.txt` by default (only included with `--with-key`).
+  - Bundles minimal `velopath/` package (`__init__.py`, `tracker.py`, `model_manager.py`, `remote_gpu.py`).
+  - Bundles model weights into `models/` (`ball_trackingv4.pt` and `ball_small_yolo11s.pt`).
+  - Clean extraction to isolated temp directory without repo on pythonpath confirms `python -c "import velopath.tracker"` succeeds.
+- Anything surprising: None; model weight discovery and relative project root resolution in unzipped context worked as designed.
+
 ## Review log (Claude appends)
