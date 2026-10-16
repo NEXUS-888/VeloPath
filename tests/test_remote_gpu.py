@@ -252,3 +252,63 @@ def test_remote_tracker_wrong_key_raises(tmp_path):
     finally:
         srv.shutdown()
 
+
+def test_pipeline_with_fake_remote_tracker_injected(tmp_path):
+    from velopath.pipeline import process_pitch_video
+    video_path = os.path.join(ROOT, "assets", "sample_pitch.mp4")
+    out_path = str(tmp_path / "out.mp4")
+
+    class FakeRemoteTracker:
+        def __init__(self):
+            self.last_plate = None
+            self.last_resolved_perspective = "behind_catcher"
+            self.model = type("M", (), {"gpu_name": "RTX 4090", "using_fallback": False})()
+            self.track_called = False
+
+        def track_video(self, *args, **kwargs):
+            self.track_called = True
+            pts = [
+                TrajectoryPoint(0, 100.0, 200.0, 0.9, 5.0),
+                TrajectoryPoint(1, 105.0, 205.0, 0.9, 5.0),
+                TrajectoryPoint(2, 110.0, 210.0, 0.9, 5.0),
+            ]
+            return pts, 30.0, (1920, 1080)
+
+    fake_remote = FakeRemoteTracker()
+    res = process_pitch_video(video_path, out_path, tracker=fake_remote)
+    assert fake_remote.track_called
+    assert res["compute"] == "RTX 4090 (GPU worker)"
+    assert res["pitch_detected"] is True
+    assert "trajectory" in res
+    assert "zone_calibrated" in res
+    assert os.path.exists(out_path)
+
+
+def test_pipeline_fallback_label(tmp_path):
+    from velopath.pipeline import process_pitch_video
+    video_path = os.path.join(ROOT, "assets", "sample_pitch.mp4")
+    out_path = str(tmp_path / "out_fb.mp4")
+
+    class FakeFallbackTracker:
+        def __init__(self):
+            self.last_plate = None
+            self.last_resolved_perspective = "behind_catcher"
+            self.model = type("M", (), {"gpu_name": "RTX 4090", "using_fallback": True})()
+
+        def track_video(self, *args, **kwargs):
+            pts = [
+                TrajectoryPoint(0, 100.0, 200.0, 0.9, 5.0),
+                TrajectoryPoint(1, 105.0, 205.0, 0.9, 5.0),
+            ]
+            return pts, 30.0, (1920, 1080)
+
+    res = process_pitch_video(video_path, out_path, tracker=FakeFallbackTracker())
+    assert res["compute"] == "this computer"
+
+
+def test_pipeline_without_worker_configured_stays_local(tmp_path):
+    from velopath.pipeline import get_active_tracker, get_tracker
+    tracker = get_active_tracker(config_path=str(tmp_path / "nonexistent.json"))
+    assert tracker is get_tracker()
+
+

@@ -23,6 +23,28 @@ def get_tracker() -> PitchTracker:
     return PitchTracker()
 
 
+def get_active_tracker(config_path: Optional[str] = None):
+    """
+    Returns RemoteTracker if gpu_worker.json exists and is configured;
+    falls back to the local PitchTracker on error or when not configured.
+    """
+    local = get_tracker()
+    try:
+        from velopath.model_manager import get_project_root
+        from velopath.remote_gpu import RemoteTracker
+        cfg_file = config_path or os.path.join(get_project_root(), "gpu_worker.json")
+        if os.path.exists(cfg_file):
+            import json
+            with open(cfg_file, encoding="utf-8") as f:
+                cfg = json.load(f)
+            url, key = cfg.get("url"), cfg.get("key")
+            if url and key:
+                return RemoteTracker(url, key, fallback=local, timeout=float(cfg.get("timeout", 5.0)))
+    except Exception:
+        pass
+    return local
+
+
 def _is_normal(mode: Optional[str], perspective: Optional[str]) -> bool:
     return (mode or "baseball").lower().strip() in ("normal", "general") or (perspective or "").lower().strip() in ("normal", "general")
 
@@ -179,6 +201,7 @@ def process_pitch_video(
     mode: str = "baseball",
     progress: Optional[Callable[[str, float], None]] = None,
     time_window: Optional[Tuple[float, float]] = None,
+    tracker: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """
     Tracks the ball, measures speed / break, makes the ABS call (when a real zone exists)
@@ -191,8 +214,8 @@ def process_pitch_video(
     report("Queued", 0.0)  # another upload may hold the tracker
     with _TRACK_LOCK:
         report("Tracking ball", 0.0)
-        tracker = get_tracker()
-        trajectory_points, fps, (width, height) = tracker.track_video(
+        active_tracker = tracker or get_active_tracker()
+        trajectory_points, fps, (width, height) = active_tracker.track_video(
             input_video_path,
             conf_thresh=conf_thresh,
             ball_type=ball_type,
@@ -201,10 +224,11 @@ def process_pitch_video(
             progress_callback=lambda frac: report("Tracking ball", 0.85 * frac),
             time_window=time_window,  # (start_s, end_s) the user marked around the pitch
         )
-        resolved_perspective = getattr(tracker, "last_resolved_perspective", None) or perspective
-        plate = getattr(tracker, "last_plate", None)
-        gpu = getattr(getattr(tracker, "model", None), "gpu_name", None)
-        compute = f"{gpu} (GPU worker)" if gpu and not tracker.model.using_fallback else "this computer"
+        resolved_perspective = getattr(active_tracker, "last_resolved_perspective", None) or perspective
+        plate = getattr(active_tracker, "last_plate", None)
+        gpu = getattr(getattr(active_tracker, "model", None), "gpu_name", None)
+        using_fallback = getattr(getattr(active_tracker, "model", None), "using_fallback", False)
+        compute = f"{gpu} (GPU worker)" if gpu and not using_fallback else "this computer"
 
     is_normal_mode = _is_normal(mode, resolved_perspective)
     if not trajectory_points:
@@ -358,3 +382,7 @@ def rerender_pitch(
         is_normal_mode, show_strike_zone, distance_ft, ball_type, perspective, pitch_number,
         graphic_style, trim_to_pitch, hud_style, max_dimension, lambda stage, pct: None, cam=cam,
     )
+
+
+process_video = process_pitch_video
+

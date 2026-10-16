@@ -144,4 +144,17 @@ If a step fails twice, write STUCK with the error and stop.
   - Constant-time bad key check raising `PermissionError` without hiding.
 - Anything surprising: None; streaming upload with http.client file-like body and background polling behaved cleanly.
 
+### Step 4 - DONE
+- Files changed: `velopath/pipeline.py`, `tests/test_remote_gpu.py`, `PLAN_REMOTE_TRACK.md`.
+- Pytest result: `161 passed, 2 deselected in 94.51s (0:01:34)`.
+- What was verified:
+  - `get_active_tracker()` inspects `gpu_worker.json` dynamically per clip.
+  - When configured, uses `RemoteTracker` with fallback to local `PitchTracker`.
+  - Every clip checks worker health without requiring app or server restart.
+  - Tracking stays thread-safe within `_TRACK_LOCK`.
+  - Compute label logic properly renders `"<gpu> (GPU worker)"` or `"this computer"` on fallback or local run.
+  - `process_pitch_video` returns identical fields with remote or local tracking.
+  - No change in behavior when worker is unconfigured or offline.
+- Anything surprising: None; clean integration and seamless fallback logic.
+
 ## Review log (Claude appends)
