@@ -290,7 +290,7 @@ def main():
     key_path = os.path.join(HERE, "key.txt")
     weights = find_weights(HERE)
     if not os.path.exists(key_path) or not weights:
-        sys.exit("Missing key.txt or the model .pt file next to this script. Ask for the full worker folder.")
+        sys.exit(f"Worker folder: {HERE}\n  key.txt found: {os.path.exists(key_path)}\n  model .pt found (here or models/): {bool(weights)}\n  files here: {', '.join(sorted(os.listdir(HERE)))}\nAsk for the full worker folder.")
     key = open(key_path, encoding="utf-8").read().strip()
     if not torch.cuda.is_available():
         sys.exit("No NVIDIA GPU visible to PyTorch. Update the NVIDIA driver (nvidia.com/drivers) and retry.")
