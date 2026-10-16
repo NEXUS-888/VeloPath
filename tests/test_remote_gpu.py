@@ -8,7 +8,8 @@ import cv2
 import numpy as np
 import pytest
 
-from velopath.remote_gpu import RemoteYolo, connect_remote
+from velopath.remote_gpu import RemoteYolo, RemoteTracker, connect_remote
+from velopath.tracker import TrajectoryPoint
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _spec = importlib.util.spec_from_file_location("velopath_worker", os.path.join(ROOT, "worker", "velopath_worker.py"))
@@ -92,3 +93,162 @@ def test_connect_remote_uses_config_file_when_worker_is_up(server, tmp_path):
     assert model is not None and model.gpu_name == "Fake GPU"
     cfg.write_text(json.dumps({"url": "http://127.0.0.1:9", "key": KEY}))
     assert connect_remote(str(cfg), fallback=None) is None  # configured but offline: stay local
+
+
+class FakeLocalFallback:
+    def __init__(self):
+        self.last_plate = (1.0, 2.0, 3.0, 4.0)
+        self.last_resolved_perspective = "behind_pitcher"
+        self.called = False
+
+    def track_video(self, *args, **kwargs):
+        self.called = True
+        return [TrajectoryPoint(0, 50.0, 50.0, 0.8, 4.0)], 25.0, (1280, 720)
+
+
+class FakeWorkerTracker:
+    def __init__(self, sleep_s=0.05):
+        self.sleep_s = sleep_s
+        self.last_plate = (10.0, 20.0, 30.0, 40.0)
+        self.last_resolved_perspective = "behind_catcher"
+        self.points = [
+            TrajectoryPoint(1, 100.0, 100.0, 0.9, 5.0),
+            TrajectoryPoint(2, 110.0, 110.0, 0.95, 5.1),
+        ]
+
+    def track_video(self, path, progress_callback=None, **kw):
+        import time
+        if progress_callback:
+            progress_callback(0.5)
+        if self.sleep_s:
+            time.sleep(self.sleep_s)
+        return self.points, 30.0, (1920, 1080)
+
+
+def test_remote_tracker_happy_path(tmp_path):
+    wt = FakeWorkerTracker(sleep_s=0.02)
+    code_hash = worker.compute_tracker_code_hash()
+    srv = worker.make_server(wt, KEY, "127.0.0.1", 0, gpu_name="RTX 4090", code_hash=code_hash)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    url = f"http://127.0.0.1:{srv.server_address[1]}"
+    try:
+        video_file = tmp_path / "pitch.mp4"
+        video_file.write_bytes(b"dummy video data")
+
+        fallback = FakeLocalFallback()
+        remote = RemoteTracker(url, KEY, fallback=fallback)
+        remote.poll_interval = 0.02
+        progresses = []
+        points, fps, size = remote.track_video(
+            str(video_file),
+            progress_callback=lambda p: progresses.append(p)
+        )
+
+        assert len(points) == 2
+        assert points[0].frame_idx == 1 and points[0].x == 100.0
+        assert fps == 30.0
+        assert size == (1920, 1080)
+        assert remote.last_plate == (10.0, 20.0, 30.0, 40.0)
+        assert remote.last_resolved_perspective == "behind_catcher"
+        assert not remote.using_fallback
+        assert remote.model.gpu_name == "RTX 4090"
+        assert not fallback.called
+        assert len(progresses) > 0 and progresses[-1] == 1.0
+    finally:
+        srv.shutdown()
+
+
+def test_remote_tracker_busy_gives_fallback(tmp_path):
+    slow_worker = FakeWorkerTracker(sleep_s=0.5)
+    code_hash = worker.compute_tracker_code_hash()
+    srv = worker.make_server(slow_worker, KEY, "127.0.0.1", 0, gpu_name="RTX 4090", code_hash=code_hash)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    url = f"http://127.0.0.1:{srv.server_address[1]}"
+    try:
+        video_file = tmp_path / "pitch.mp4"
+        video_file.write_bytes(b"dummy video data")
+
+        # Start a background request to make worker busy
+        import http.client
+        from urllib.parse import urlparse
+        u = urlparse(url)
+        conn = http.client.HTTPConnection(u.hostname, u.port, timeout=5)
+        conn.request("POST", "/track", body=b"video1", headers={"X-VeloPath-Key": KEY, "Content-Length": "6"})
+        resp = conn.getresponse()
+        assert resp.status == 202
+
+        fallback = FakeLocalFallback()
+        remote = RemoteTracker(url, KEY, fallback=fallback)
+        remote.poll_interval = 0.02
+        points, fps, size = remote.track_video(str(video_file))
+
+        assert fallback.called
+        assert remote.using_fallback
+        assert points[0].frame_idx == 0
+        assert remote.last_plate == (1.0, 2.0, 3.0, 4.0)
+    finally:
+        srv.shutdown()
+
+
+def test_remote_tracker_worker_killed_mid_job_gives_fallback(tmp_path):
+    slow_worker = FakeWorkerTracker(sleep_s=0.5)
+    code_hash = worker.compute_tracker_code_hash()
+    srv = worker.make_server(slow_worker, KEY, "127.0.0.1", 0, gpu_name="RTX 4090", code_hash=code_hash)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    url = f"http://127.0.0.1:{srv.server_address[1]}"
+
+    video_file = tmp_path / "pitch.mp4"
+    video_file.write_bytes(b"dummy video data")
+
+    fallback = FakeLocalFallback()
+    remote = RemoteTracker(url, KEY, fallback=fallback)
+    remote.poll_interval = 0.02
+
+    # Hook progress_callback to kill worker during job
+    def on_progress(p):
+        srv.shutdown()
+
+    points, fps, size = remote.track_video(str(video_file), progress_callback=on_progress)
+    assert fallback.called
+    assert remote.using_fallback
+    assert points[0].frame_idx == 0
+
+
+def test_remote_tracker_code_mismatch_gives_fallback(tmp_path):
+    wt = FakeWorkerTracker()
+    srv = worker.make_server(wt, KEY, "127.0.0.1", 0, gpu_name="RTX 4090", code_hash="mismatched_sha")
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    url = f"http://127.0.0.1:{srv.server_address[1]}"
+    try:
+        video_file = tmp_path / "pitch.mp4"
+        video_file.write_bytes(b"dummy video data")
+
+        fallback = FakeLocalFallback()
+        remote = RemoteTracker(url, KEY, fallback=fallback)
+        remote.poll_interval = 0.02
+        points, fps, size = remote.track_video(str(video_file))
+
+        assert fallback.called
+        assert remote.using_fallback
+    finally:
+        srv.shutdown()
+
+
+def test_remote_tracker_wrong_key_raises(tmp_path):
+    wt = FakeWorkerTracker()
+    code_hash = worker.compute_tracker_code_hash()
+    srv = worker.make_server(wt, KEY, "127.0.0.1", 0, gpu_name="RTX 4090", code_hash=code_hash)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    url = f"http://127.0.0.1:{srv.server_address[1]}"
+    try:
+        video_file = tmp_path / "pitch.mp4"
+        video_file.write_bytes(b"dummy video data")
+
+        fallback = FakeLocalFallback()
+        remote = RemoteTracker(url, "wrong-key", fallback=fallback)
+        with pytest.raises(PermissionError):
+            remote.track_video(str(video_file))
+        assert not fallback.called
+    finally:
+        srv.shutdown()
+

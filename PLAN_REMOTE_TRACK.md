@@ -130,4 +130,18 @@ If a step fails twice, write STUCK with the error and stop.
   - Clean extraction to isolated temp directory without repo on pythonpath confirms `python -c "import velopath.tracker"` succeeds.
 - Anything surprising: None; model weight discovery and relative project root resolution in unzipped context worked as designed.
 
+### Step 3 - DONE
+- Files changed: `velopath/remote_gpu.py`, `tests/test_remote_gpu.py`, `PLAN_REMOTE_TRACK.md`.
+- Pytest result: `158 passed, 2 deselected in 78.27s (0:01:18)`.
+- What was verified:
+  - `RemoteTracker` client streaming video uploads via `http.client`.
+  - `/health` check with code hash comparison against local `velopath/tracker.py`.
+  - Correct polling and trajectory mapping to `TrajectoryPoint` objects, `last_plate`, and `last_resolved_perspective`.
+  - Polling progress calculation calling `progress_callback(0.1 + 0.9 * frac)` (upload is first 10%).
+  - Graceful fallback on 409 busy, 413 too large, code mismatch, timeouts, and mid-job worker termination.
+  - Automatic `RETRY_AFTER_S` (30s) cool-down window during which `using_fallback` stays True.
+  - UI `model.gpu_name` and `model.using_fallback` compatibility adapter.
+  - Constant-time bad key check raising `PermissionError` without hiding.
+- Anything surprising: None; streaming upload with http.client file-like body and background polling behaved cleanly.
+
 ## Review log (Claude appends)
