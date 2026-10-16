@@ -276,12 +276,19 @@ def keep_awake():
         ctypes.windll.kernel32.SetThreadExecutionState(0x80000000 | 0x00000001)  # ES_CONTINUOUS | ES_SYSTEM_REQUIRED
 
 
+def find_weights(here: str) -> str:
+    """The big ball model: next to this script (old layout) or in models/ (zip from worker/package.py). Never the small scan model."""
+    found = [os.path.join(d, f) for d in (here, os.path.join(here, "models")) if os.path.isdir(d)
+             for f in sorted(os.listdir(d)) if f.endswith(".pt") and "small" not in f]
+    return found[0] if found else ""
+
+
 def main():
     import torch
     from ultralytics import YOLO
 
     key_path = os.path.join(HERE, "key.txt")
-    weights = sorted(f for f in os.listdir(HERE) if f.endswith(".pt"))
+    weights = find_weights(HERE)
     if not os.path.exists(key_path) or not weights:
         sys.exit("Missing key.txt or the model .pt file next to this script. Ask for the full worker folder.")
     key = open(key_path, encoding="utf-8").read().strip()
@@ -289,7 +296,7 @@ def main():
         sys.exit("No NVIDIA GPU visible to PyTorch. Update the NVIDIA driver (nvidia.com/drivers) and retry.")
 
     gpu = torch.cuda.get_device_name(0)
-    model = YOLO(os.path.join(HERE, weights[0]))
+    model = YOLO(weights)
     model.to("cuda")
     model.predict(np.zeros((640, 640, 3), np.uint8), imgsz=640, half=True, verbose=False)  # warm up CUDA
     del model
@@ -297,7 +304,7 @@ def main():
         torch.cuda.empty_cache()
 
     from velopath.tracker import PitchTracker
-    tracker = PitchTracker(model_path=os.path.join(HERE, weights[0]))
+    tracker = PitchTracker(model_path=weights)
     code_hash = compute_tracker_code_hash()
 
     host = tailscale_ip()

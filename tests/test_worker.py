@@ -233,3 +233,12 @@ def test_package_creates_valid_zip_and_can_import_tracker(tmp_path):
     assert check.returncode == 0, f"Import failed: {check.stderr}\n{check.stdout}"
     assert "OK" in check.stdout
 
+
+
+def test_find_weights_picks_the_big_model_in_models_folder_not_the_small_one(tmp_path):
+    from worker.velopath_worker import find_weights
+    (tmp_path / "models").mkdir()
+    (tmp_path / "models" / "ball_small_yolo11s.pt").write_bytes(b"x")
+    (tmp_path / "models" / "ball_trackingv4.pt").write_bytes(b"x")
+    assert find_weights(str(tmp_path)).endswith("ball_trackingv4.pt")
+    assert find_weights(str(tmp_path / "nothing")) == ""
