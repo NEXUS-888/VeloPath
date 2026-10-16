@@ -56,20 +56,24 @@ class RemoteTracker:
         self._down_until = 0.0
         self.last_plate = None
         self.last_resolved_perspective = "auto"
+        self.last_run_remote = None
         self.model = _RemoteModelAdapter(self)
         self.poll_interval = 1.0  # seconds between poll requests
 
     @property
     def using_fallback(self) -> bool:
+        if self.last_run_remote is False:
+            return True
         return time.monotonic() < self._down_until
 
-    def _run_fallback(self, error, *args, **kwargs):
+    def _run_fallback(self, error, path, **kwargs):
+        self.last_run_remote = False
         if self.fallback is None:
             raise error
-        if not self.using_fallback:
+        if time.monotonic() >= self._down_until:
             print(f"[RemoteGPU] GPU worker error ({error}); using this computer for {RETRY_AFTER_S:.0f}s.")
-            self._down_until = time.monotonic() + RETRY_AFTER_S
-        res = self.fallback.track_video(*args, **kwargs)
+        res = self.fallback.track_video(path, **kwargs)
+        self._down_until = time.monotonic() + RETRY_AFTER_S
         self.last_plate = getattr(self.fallback, "last_plate", None)
         self.last_resolved_perspective = getattr(
             self.fallback, "last_resolved_perspective", kwargs.get("perspective", "auto")
@@ -86,7 +90,7 @@ class RemoteTracker:
         progress_callback=None,
         time_window: Optional[Tuple[float, float]] = None,
     ):
-        if self.using_fallback:
+        if time.monotonic() < self._down_until:
             return self._run_fallback(
                 RuntimeError("worker temporarily offline"),
                 path,
@@ -118,7 +122,7 @@ class RemoteTracker:
             self.gpu_name = health.get("gpu", "")
             local_hash = _get_local_tracker_hash()
             remote_hash = health.get("code", "")
-            if local_hash and remote_hash and local_hash != remote_hash:
+            if not remote_hash or (local_hash and local_hash != remote_hash):
                 print("[RemoteGPU] worker runs different tracker code, using this computer")
                 raise RuntimeError("worker runs different tracker code, using this computer")
 
@@ -189,6 +193,7 @@ class RemoteTracker:
                         size = tuple(res["size"])
                         self.last_plate = tuple(float(v) for v in res["plate"]) if res.get("plate") is not None else None
                         self.last_resolved_perspective = res.get("perspective", perspective)
+                        self.last_run_remote = True
                         if progress_callback:
                             progress_callback(1.0)
                         return points, fps, size

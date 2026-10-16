@@ -23,23 +23,34 @@ def get_tracker() -> PitchTracker:
     return PitchTracker()
 
 
+_REMOTE_TRACKERS: Dict[Tuple[str, str, float], Any] = {}
+
+
 def get_active_tracker(config_path: Optional[str] = None):
     """
-    Returns RemoteTracker if gpu_worker.json exists and is configured;
+    Returns cached RemoteTracker if gpu_worker.json exists and is configured;
     falls back to the local PitchTracker on error or when not configured.
     """
     local = get_tracker()
     try:
         from velopath.model_manager import get_project_root
-        from velopath.remote_gpu import RemoteTracker
         cfg_file = config_path or os.path.join(get_project_root(), "gpu_worker.json")
         if os.path.exists(cfg_file):
             import json
             with open(cfg_file, encoding="utf-8") as f:
                 cfg = json.load(f)
             url, key = cfg.get("url"), cfg.get("key")
+            timeout = float(cfg.get("timeout", 5.0))
             if url and key:
-                return RemoteTracker(url, key, fallback=local, timeout=float(cfg.get("timeout", 5.0)))
+                cache_key = (url, key, timeout)
+                tracker = _REMOTE_TRACKERS.get(cache_key)
+                if tracker is None:
+                    from velopath.remote_gpu import RemoteTracker
+                    tracker = RemoteTracker(url, key, fallback=local, timeout=timeout)
+                    _REMOTE_TRACKERS[cache_key] = tracker
+                else:
+                    tracker.fallback = local
+                return tracker
     except Exception:
         pass
     return local
@@ -382,7 +393,4 @@ def rerender_pitch(
         is_normal_mode, show_strike_zone, distance_ft, ball_type, perspective, pitch_number,
         graphic_style, trim_to_pitch, hud_style, max_dimension, lambda stage, pct: None, cam=cam,
     )
-
-
-process_video = process_pitch_video
 

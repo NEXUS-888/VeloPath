@@ -182,6 +182,18 @@ If a step fails twice, write STUCK with the error and stop.
   - All 5 acceptance criteria verified and confirmed.
 - Anything surprising: None; clean removal of legacy path and all tests green.
 
+### Review Fixes (Round 1) - DONE
+- Files changed: `velopath/remote_gpu.py`, `velopath/pipeline.py`, `tests/test_remote_gpu.py`, `PLAN_REMOTE_TRACK.md`.
+- Pytest result: `160 passed, 2 deselected in 74.97s (0:01:14)`.
+- What was verified:
+  - Must-fix 1: Recorded `self.last_run_remote` (True on remote result, False on fallback); moved cooldown start to after fallback run finishes so `using_fallback` stays True and compute label says "this computer".
+  - Must-fix 2: Cached `RemoteTracker` per `(url, key, timeout)` in `_REMOTE_TRACKERS` while re-reading `gpu_worker.json` each clip. Second consecutive clip with offline worker skips connection attempt during cooldown. Also kept `tracker.fallback = local` in sync with active or patched local tracker.
+  - Must-fix 3: Missing or empty `code` in `/health` now immediately triggers code mismatch and falls back before attempting video upload.
+  - Removed unused `process_video = process_pitch_video` alias from `velopath/pipeline.py`.
+  - Rebuilt `velopath_gpu_worker.zip` (161.7 MB).
+  - All 3 new tests in `tests/test_remote_gpu.py` passing; `python worker/selftest.py` prints PASS.
+- Anything surprising: None; clean fixes aligned with Ponytail simplicity and full test suite passing.
+
 ## Review log (Claude appends)
 
 ### Review of Remote Track (round 1): CHANGES REQUESTED

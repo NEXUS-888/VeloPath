@@ -252,3 +252,119 @@ def test_pipeline_without_worker_configured_stays_local(tmp_path):
     assert tracker is get_tracker()
 
 
+def test_remote_tracker_cooldown_and_label_after_slow_fallback(tmp_path, monkeypatch):
+    import time
+    from velopath import remote_gpu
+    from velopath.pipeline import process_pitch_video
+    monkeypatch.setattr(remote_gpu, "RETRY_AFTER_S", 0.05)
+
+    class SlowFallback:
+        def __init__(self):
+            self.last_plate = None
+            self.last_resolved_perspective = "behind_catcher"
+        def track_video(self, *args, **kwargs):
+            time.sleep(0.1)  # Longer than RETRY_AFTER_S
+            return [TrajectoryPoint(0, 100.0, 200.0, 0.9, 5.0)], 30.0, (1920, 1080)
+
+    # Worker on port 9 (offline)
+    remote = remote_gpu.RemoteTracker("http://127.0.0.1:9", KEY, fallback=SlowFallback(), timeout=0.1)
+    remote.gpu_name = "NVIDIA GeForce RTX 3050"
+
+    video_path = os.path.join(ROOT, "assets", "sample_pitch.mp4")
+    out_path = str(tmp_path / "out_slow_fb.mp4")
+
+    # Run via pipeline
+    res = process_pitch_video(video_path, out_path, tracker=remote)
+    assert remote.model.using_fallback is True
+    assert getattr(remote, "last_run_remote", None) is False
+    assert res["compute"] == "this computer"
+
+
+def test_get_active_tracker_caches_and_second_clip_skips_unreachable_worker(tmp_path):
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+    from velopath.pipeline import get_active_tracker
+
+    connection_count = 0
+    class CountingHandler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            nonlocal connection_count
+            connection_count += 1
+            self.send_response(500)
+            self.end_headers()
+        def log_message(self, *args):
+            pass
+
+    server = HTTPServer(("127.0.0.1", 0), CountingHandler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    url = f"http://127.0.0.1:{server.server_address[1]}"
+    try:
+        cfg = tmp_path / "gpu_worker.json"
+        cfg.write_text(json.dumps({"url": url, "key": KEY, "timeout": 0.5}))
+
+        video_file = tmp_path / "pitch.mp4"
+        video_file.write_bytes(b"dummy video")
+
+        tracker1 = get_active_tracker(config_path=str(cfg))
+        fallback = FakeLocalFallback()
+        tracker1.fallback = fallback
+        tracker1.track_video(str(video_file))
+
+        assert connection_count == 1
+        assert fallback.called
+
+        # Second clip immediately: should reuse tracker and skip connection because in cooldown
+        tracker2 = get_active_tracker(config_path=str(cfg))
+        assert tracker2 is tracker1
+        fallback2 = FakeLocalFallback()
+        tracker2.fallback = fallback2
+        tracker2.track_video(str(video_file))
+
+        assert connection_count == 1  # No second connection attempted!
+        assert fallback2.called
+    finally:
+        server.shutdown()
+
+
+def test_remote_tracker_missing_code_in_health_gives_fallback_without_upload(tmp_path):
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+    from velopath.remote_gpu import RemoteTracker
+
+    upload_attempted = False
+    class OldWorkerHandler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            if self.path == "/health":
+                # Old worker without code hash
+                body = json.dumps({"ok": True, "gpu": "RTX 3050"}).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+            else:
+                self.send_response(404)
+                self.end_headers()
+        def do_POST(self):
+            nonlocal upload_attempted
+            upload_attempted = True
+            self.send_response(404)
+            self.end_headers()
+        def log_message(self, *args):
+            pass
+
+    server = HTTPServer(("127.0.0.1", 0), OldWorkerHandler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    url = f"http://127.0.0.1:{server.server_address[1]}"
+    try:
+        fallback = FakeLocalFallback()
+        remote = RemoteTracker(url, KEY, fallback=fallback)
+        video_file = tmp_path / "pitch.mp4"
+        video_file.write_bytes(b"dummy video data")
+
+        pts, fps, size = remote.track_video(str(video_file))
+        assert fallback.called
+        assert not upload_attempted  # No upload was attempted!
+    finally:
+        server.shutdown()
+
+
+
