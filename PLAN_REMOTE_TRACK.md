@@ -72,7 +72,7 @@ happy path equals the fake's points; busy gives fallback; worker killed mid-job 
 
 **Step 4 - wire into the pipeline** (`velopath/pipeline.py`, small).
 Keep the local `PitchTracker`; when `gpu_worker.json` exists and the worker answers `/health`, `_analyze_and_render` calls `RemoteTracker.track_video`
-instead. Keep `_TRACK_LOCK` and the "compute" label logic (`"<gpu> (GPU worker)"` vs `"this computer"`). Tests: with a fake remote tracker injected,
+instead. The `/health` check runs for EVERY clip (5 s timeout), not once at server start, so starting or stopping the friend's worker never needs an app restart; if it does not answer, that clip runs locally. Keep `_TRACK_LOCK` and the "compute" label logic (`"<gpu> (GPU worker)"` vs `"this computer"`). Tests: with a fake remote tracker injected,
 `process_video` still returns the same fields (`compute`, trajectory, `zone_calibrated`, ...); with none configured nothing changes. Existing tests stay green.
 
 **Step 5 - local equality test (no GPU needed)**.
