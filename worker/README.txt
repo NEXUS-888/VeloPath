@@ -18,4 +18,4 @@ EACH TIME
 SAFETY
 - Only devices on your Tailscale network can reach it, and every request needs the
   secret key in key.txt. Do not share key.txt with anyone else.
-- It only runs the ball-detection model on images it is sent; it cannot read your files.
+- It only runs ball tracking on video clips it is sent and returns trajectory points; it cannot read your personal files.

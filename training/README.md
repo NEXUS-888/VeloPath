@@ -66,3 +66,6 @@ pitch start/end, which would shift speed and break slightly).
 3. Copy `training/make_synthetic.py` to `/content/` and run the pipeline cell: unzip, generate data, train (or resume from `last.pt`).
 4. Download `runs/ball_s1280/weights/best.pt`, save as `models/ball_small_yolo11s.pt`, then run `compare_models.py` and
    keep it only if both held-out clips still match the big model.
+
+## Remote GPU
+For setups without local NVIDIA GPUs, VeloPath supports remote GPU tracking. The worker runs as an HTTP service (`worker/velopath_worker.py`) on an NVIDIA GPU machine connected over Tailscale. Instead of sending per-frame predict requests over the network, `RemoteTracker` streams the entire video file once via `POST /track` and polls `/job/<id>`. When tracking completes, trajectory points, plate coordinates, and perspective are returned and evaluated locally. If the worker is offline, busy, or running mismatched tracker code, `RemoteTracker` falls back to the local `PitchTracker` on CPU.

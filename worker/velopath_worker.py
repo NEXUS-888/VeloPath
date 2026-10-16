@@ -23,7 +23,6 @@ GET  /job/<id>                                  header: X-VeloPath-Key
     -> {"state": "error", "error": "..."}
 GET  /health                                    header: X-VeloPath-Key
     -> {"ok": true, "gpu": "...", "names": {...}, "code": "<sha256>", "busy": false}
-POST /predict                                   header: X-VeloPath-Key (legacy, removed in Step 6)
 
 Needs key.txt and the model weights (*.pt) next to this file. Started by start_worker.bat.
 """
@@ -41,7 +40,6 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
-import cv2
 import numpy as np
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -194,25 +192,6 @@ def make_server(
                 )
                 t.start()
                 return self._reply(202, {"job": job_id})
-
-            if url.path == "/predict":
-                length = int(self.headers.get("Content-Length", 0))
-                data = self.rfile.read(length) if 0 < length <= 20_000_000 else b""
-                if not data:
-                    return self._reply(400, {"error": "bad request"})
-                q = {k: v[0] for k, v in parse_qs(url.query).items()}
-                img = cv2.imdecode(np.frombuffer(data, np.uint8), cv2.IMREAD_COLOR)
-                if img is None:
-                    return self._reply(400, {"error": "not an image"})
-                classes = [int(c) for c in q["classes"].split(",")] if q.get("classes") else None
-                kwargs = {"imgsz": int(q.get("imgsz", 640)), "conf": float(q.get("conf", 0.25)), "verbose": False}
-                if half:
-                    kwargs["half"] = True
-                pred_model = getattr(tracker, "model", tracker)
-                boxes = pred_model.predict(img, classes=classes, **kwargs)[0].boxes
-                rows = [list(map(float, b)) + [float(c), float(k)]
-                        for b, c, k in zip(boxes.xyxy.tolist(), boxes.conf.tolist(), boxes.cls.tolist())]
-                return self._reply(200, {"boxes": rows})
 
             return self._reply(404, {"error": "not found"})
 

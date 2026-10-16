@@ -167,4 +167,19 @@ If a step fails twice, write STUCK with the error and stop.
   - Timing recorded: Remote tracking = 54.89s, Local tracking = 62.43s.
 - Anything surprising: PyTorch CPU OpenMP reduction across separate runs exhibits a minor ~3e-5 pixel float32 difference; verified all points within 0.0001 px tolerance.
 
+### Step 6 - DONE
+- Files changed: `velopath/remote_gpu.py`, `velopath/tracker.py`, `worker/velopath_worker.py`, `worker/README.txt`, `training/README.md`, `tests/test_remote_gpu.py`, `PLAN_REMOTE_TRACK.md`.
+- Pytest result: `157 passed, 2 deselected in 63.28s (0:01:03)`.
+- What was verified:
+  - Deleted per-frame legacy predict path (`RemoteYolo`, `_Boxes`, `_Result`, and worker `POST /predict`).
+  - Removed only the 3-line `connect_remote` block from `velopath/tracker.py`.
+  - Updated `connect_remote` to return `Optional[RemoteTracker]` maintaining compatibility with `velopath/launcher.py`.
+  - Updated `worker/README.txt` safety notes for full video uploads.
+  - Added "Remote GPU" paragraph to `training/README.md`.
+  - Cleaned up obsolete tests in `tests/test_remote_gpu.py`.
+  - Rebuilt `velopath_gpu_worker.zip` (161.7 MB, verified no `key.txt`).
+  - Ran `python worker/selftest.py` which printed PASS (remote tracking matching direct local tracking).
+  - All 5 acceptance criteria verified and confirmed.
+- Anything surprising: None; clean removal of legacy path and all tests green.
+
 ## Review log (Claude appends)

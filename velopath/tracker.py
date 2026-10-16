@@ -177,11 +177,6 @@ class PitchTracker:
             except Exception as e:
                 print(f"[PitchTracker] Note: Could not load YOLO: {e}")
 
-        if self.model is not None:  # a friend's GPU worker, if configured and up; this CPU stays the fallback
-            from velopath.model_manager import get_project_root
-            from velopath.remote_gpu import connect_remote
-            self.model = connect_remote(os.path.join(get_project_root(), "gpu_worker.json"), fallback=self.model) or self.model
-
         self._normal_model = None
         # hybrid: if the small fast model is present it scans whole frames; the big model above refines windows
         self.scan_model = None
