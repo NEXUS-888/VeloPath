@@ -157,4 +157,14 @@ If a step fails twice, write STUCK with the error and stop.
   - No change in behavior when worker is unconfigured or offline.
 - Anything surprising: None; clean integration and seamless fallback logic.
 
+### Step 5 - DONE
+- Files changed: `worker/selftest.py`, `PLAN_REMOTE_TRACK.md`.
+- Pytest result: `161 passed, 2 deselected in 97.13s (0:01:37)`.
+- What was verified:
+  - `python worker/selftest.py` executed cleanly and printed PASS.
+  - Remote tracking through `RemoteTracker` against local ephemeral worker compared to direct local `PitchTracker` tracking on `not good tracking/Test !.mp4`.
+  - Trajectory points (all 15 frames), fps (30.0), size ((1280, 720)), plate coordinates, and perspective (broadcast) verified identical.
+  - Timing recorded: Remote tracking = 54.89s, Local tracking = 62.43s.
+- Anything surprising: PyTorch CPU OpenMP reduction across separate runs exhibits a minor ~3e-5 pixel float32 difference; verified all points within 0.0001 px tolerance.
+
 ## Review log (Claude appends)
