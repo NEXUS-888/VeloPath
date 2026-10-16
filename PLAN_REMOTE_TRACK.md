@@ -205,3 +205,7 @@ If a step fails twice, write STUCK with the error and stop.
 - not blocking: `process_video = process_pitch_video` alias at the end of `pipeline.py` has no non-test caller; remove it if only tests use it (use the real name in tests). A wrong key raises `PermissionError` and fails the clip by design.
 - not yet verified (needs the friend): the new worker on the real GPU. The friend's laptop still runs the OLD worker; after the fixes, rebuild with `python worker/package.py`, send them the new zip, restart, then run the "Real GPU test".
 
+### Review of Remote Track (round 2): APPROVED
+- verified: read the `remote_gpu.py` and `pipeline.py` diffs. `pytest -k "not regression"` 160 passed. Live on `Test !.mp4` through `get_active_tracker()` with the friend's OLD worker: clip 1 fell back before any upload (missing `code` hash), frames 51-65, label "this computer"; clip 2 ran locally too with the label still "this computer". The cooldown now starts after the local run, the tracker is cached per (url, key, timeout), and an empty `code` counts as a mismatch.
+- remaining: real GPU test with the NEW worker (friend must swap in the rebuilt zip).
+
