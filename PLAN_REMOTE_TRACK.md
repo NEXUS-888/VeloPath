@@ -102,4 +102,21 @@ Expected time about 10-20 s instead of 77 s (an estimate; never measured on a re
 Format: `### Step N - DONE` or `### Step N - STUCK`, then: files changed, the `pytest` result line, what was verified, anything surprising.
 If a step fails twice, write STUCK with the error and stop.
 
+### Step 1 - DONE
+- Files changed: `worker/velopath_worker.py`, `tests/test_worker.py`, `PLAN_REMOTE_TRACK.md`.
+- Pytest result: `152 passed, 2 deselected in 56.72s`.
+- What was verified:
+  - 401 without key or on wrong key.
+  - Video upload stream to temporary file returning 202 and 32-hex job ID.
+  - Background execution with ThreadingHTTPServer allowing concurrent polling.
+  - Polling `/job/<id>` returning `running` with progress, then `done` with exact trajectory points, fps, size, plate, and perspective.
+  - Concurrent upload while job running returns 409 busy.
+  - Bad or non-existent job ID returns 404.
+  - Upload exceeding max video bytes returns 413.
+  - Automatic deletion of temporary video files on job completion and failure.
+  - Tracker exception handling setting state `error` while keeping server responsive.
+  - `/health` reporting `gpu`, `names`, `code` hash, and `busy` state.
+  - Backward compatibility with legacy `/predict` preserved for Step 1-5.
+- Anything surprising: None; ThreadingHTTPServer and chunked body streaming worked seamlessly.
+
 ## Review log (Claude appends)
