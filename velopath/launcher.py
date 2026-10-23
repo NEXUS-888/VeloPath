@@ -62,6 +62,7 @@ def check_and_install_gpu_torch():
 
     cmd = [
         sys.executable, "-m", "pip", "install",
+        "--upgrade",
         "torch", "torchvision",
         "--index-url", "https://download.pytorch.org/whl/cu121"
     ]

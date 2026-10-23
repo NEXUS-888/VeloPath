@@ -23,6 +23,9 @@ worker/key.txt
 # Video Files & Outputs
 uploads/
 outputs/
+normal/
+test videos/
+CLAUDE_PLAN_REVIEW.md
 *.avi
 *.mov
 *.tmp.*

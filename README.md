@@ -1,4 +1,4 @@
-﻿# VeloPath AI ⚡⚾
+# VeloPath AI ⚡⚾
 > **Computer Vision Baseball & Cricket Pitch Trajectory Tracking, Statcast 3D Visuals & Automated Strike Zone System**
 
 [![Tests](https://img.shields.io/badge/tests-15%2F15%20passed-brightgreen.svg)]()
@@ -87,7 +87,8 @@ VeloPath/
 │   ├── test_strike_zone.py    # ABS strike calling & edge buffer tests
 │   └── test_tracker.py        # Spline smoothing & trajectory interpolation
 │
-├── run_gpu.bat                # One-click Windows NVIDIA GPU Launcher
+├── gpu.bat                    # One-click Windows NVIDIA GPU Launcher
+├── run_gpu.bat                # Windows NVIDIA GPU Launcher
 ├── run.bat                    # One-click Windows CPU Launcher
 ├── run.sh                     # One-click Unix / macOS / Linux Launcher
 ├── Dockerfile                 # Multi-stage production container image
@@ -101,7 +102,7 @@ VeloPath/
 
 ### Option A: Windows with NVIDIA GPU (Fastest)
 
-Double-click **`run_gpu.bat`** (or run from PowerShell / Command Prompt):
+Double-click **`gpu.bat`** or **`run_gpu.bat`** (or run from PowerShell / Command Prompt):
 ```cmd
 git clone https://github.com/NEXUS-888/VeloPath.git
 cd VeloPath
