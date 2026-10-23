@@ -62,6 +62,22 @@ def check_and_install_gpu_torch():
         print("[VeloPath AI] No NVIDIA GPU hardware detected on this machine. Running in optimized CPU mode.")
         return
 
+    # Loop guard: only try GPU setup once per session
+    if os.environ.get("_VELOPATH_GPU_CHECKED"):
+        return
+    os.environ["_VELOPATH_GPU_CHECKED"] = "1"
+
+    # Python version compatibility check (PyTorch CUDA requires Python 3.10, 3.11, or 3.12)
+    if sys.version_info >= (3, 13):
+        print("\n" + "=" * 60)
+        print(f" [WARNING] Python {sys.version_info.major}.{sys.version_info.minor} detected!")
+        print(" PyTorch CUDA does not support Python 3.13 or 3.14 yet.")
+        print(" To run on your NVIDIA GPU, please install Python 3.11 or 3.12:")
+        print(" https://www.python.org/downloads/release/python-3119/")
+        print(" Running in CPU fallback mode for now.")
+        print("=" * 60 + "\n")
+        return
+
     print("\n" + "=" * 60)
     print(" NVIDIA GPU hardware found! Installing PyTorch with CUDA 12.1...")
     print(" This enables 10-15x faster ball tracking on your GPU!")
@@ -75,8 +91,13 @@ def check_and_install_gpu_torch():
     ]
     try:
         subprocess.check_call(cmd)
-        print("\n[VeloPath AI] CUDA PyTorch installed! Restarting launcher to initialize GPU...")
-        os.execv(sys.executable, [sys.executable] + sys.argv)
+        test_cmd = [sys.executable, "-c", "import torch; exit(0 if torch.cuda.is_available() else 1)"]
+        if subprocess.call(test_cmd) == 0:
+            print("\n[VeloPath AI] CUDA PyTorch installed! Restarting launcher to initialize GPU...")
+            os.execv(sys.executable, [sys.executable] + sys.argv)
+        else:
+            print("\n[VeloPath AI] PyTorch was installed, but CUDA could not be activated.")
+            print("Running in CPU mode.\n")
     except Exception as e:
         print(f"[VeloPath AI] Note: Could not auto-install CUDA PyTorch: {e}")
 

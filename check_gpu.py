@@ -56,6 +56,9 @@ def main():
             print(f"  -> CUDA Build Version: {cuda_ver}")
         else:
             print("  -> PyTorch was installed without CUDA, or NVIDIA driver is not responding.")
+            if sys.version_info >= (3, 13):
+                print(f"  -> [REASON] Python {sys.version_info.major}.{sys.version_info.minor} detected. PyTorch CUDA does not support Python 3.13+ yet.")
+                print("              Install Python 3.11 or 3.12 to enable GPU acceleration.")
     except ImportError:
         print("  -> PyTorch is NOT installed in this Python environment.")
         cuda_available = False
@@ -77,6 +80,10 @@ def main():
     elif nvidia_hw:
         print(" [ACTION NEEDED] NVIDIA hardware is present, but CUDA is not active.")
         print(" How to fix:")
+        if sys.version_info >= (3, 13):
+            print(f"  * CRITICAL: You are running Python {sys.version_info.major}.{sys.version_info.minor}.")
+            print("    PyTorch with CUDA only supports Python 3.10, 3.11, or 3.12.")
+            print("    Please install Python 3.11 from: https://www.python.org/downloads/release/python-3119/")
         print("  1. Update NVIDIA GPU drivers: https://www.nvidia.com/drivers")
         print("  2. Run 'gpu.bat' which automatically installs PyTorch with CUDA 12.1.")
         print("  3. Make sure the laptop is plugged into the wall charger.")
