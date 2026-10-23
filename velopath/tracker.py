@@ -153,7 +153,8 @@ class PitchTracker:
         
         try:
             from velopath.model_manager import resolve_model_path, get_acceleration_device
-            self.device, device_name = get_acceleration_device()
+            self.device, self.device_name = get_acceleration_device()
+            device_name = self.device_name
             if model_path is None:
                 model_path = resolve_model_path(auto_download=True)
         except Exception as e:
@@ -172,6 +173,11 @@ class PitchTracker:
             try:
                 from ultralytics import YOLO
                 self.model = YOLO(model_path)
+                if self.device == "0":
+                    try:
+                        self.model.to("cuda")
+                    except Exception:
+                        pass
                 print(f"[PitchTracker] Loaded model weights from: {model_path}")
                 print(f"[PitchTracker] Compute acceleration: {device_name}")
             except Exception as e:
@@ -186,6 +192,11 @@ class PitchTracker:
             if small:
                 from ultralytics import YOLO
                 self.scan_model = YOLO(small, task="detect")
+                if self.device == "0":
+                    try:
+                        self.scan_model.to("cuda")
+                    except Exception:
+                        pass
                 print(f"[PitchTracker] Fast scan model: {small}")
         except Exception as e:
             print(f"[PitchTracker] Note: small scan model not used: {e}")

@@ -239,7 +239,13 @@ def process_pitch_video(
         plate = getattr(active_tracker, "last_plate", None)
         gpu = getattr(getattr(active_tracker, "model", None), "gpu_name", None)
         using_fallback = getattr(getattr(active_tracker, "model", None), "using_fallback", False)
-        compute = f"{gpu} (GPU worker)" if gpu and not using_fallback else "this computer"
+        if gpu and not using_fallback:
+            compute = f"{gpu} (GPU worker)"
+        elif getattr(active_tracker, "device", "") == "0":
+            dev_name = getattr(active_tracker, "device_name", "NVIDIA GPU")
+            compute = f"Local GPU ({dev_name})"
+        else:
+            compute = "this computer"
 
     is_normal_mode = _is_normal(mode, resolved_perspective)
     if not trajectory_points:

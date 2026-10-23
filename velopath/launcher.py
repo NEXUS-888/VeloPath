@@ -28,14 +28,21 @@ def get_local_ip() -> str:
 def has_nvidia_hardware() -> bool:
     """Detects whether an NVIDIA GPU is physically present on this computer."""
     try:
-        subprocess.check_call(["nvidia-smi"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        return True
+        for p in ["nvidia-smi", r"C:\Windows\System32\nvidia-smi.exe", r"C:\Program Files\NVIDIA Corporation\NVSMI\nvidia-smi.exe"]:
+            try:
+                subprocess.check_call([p], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                return True
+        
+            except Exception:
+                pass
+
+
     except Exception:
         pass
     try:
         # PowerShell video controller check
         ps_cmd = 'Get-CimInstance Win32_VideoController | Select-Object -ExpandProperty Name'
-        out = subprocess.check_output(['powershell', '-Command', ps_cmd], text=True, stderr=subprocess.DEVNULL)
+        out = subprocess.check_output(['powershell', '-NoProfile', '-Command', ps_cmd], text=True, stderr=subprocess.DEVNULL)
         return 'nvidia' in out.lower()
     except Exception:
         pass
@@ -68,6 +75,8 @@ def check_and_install_gpu_torch():
     ]
     try:
         subprocess.check_call(cmd)
+        print("\n[VeloPath AI] CUDA PyTorch installed! Restarting launcher to initialize GPU...")
+        os.execv(sys.executable, [sys.executable] + sys.argv)
     except Exception as e:
         print(f"[VeloPath AI] Note: Could not auto-install CUDA PyTorch: {e}")
 
