@@ -47,7 +47,8 @@ plate_inspection_*.jpg
 .DS_Store
 Thumbs.db
 
-# Presentations
+# Packages & Presentations
+*.zip
 PPT/
 proofs/
 velopath_gpu_worker.zip
